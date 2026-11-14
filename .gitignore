@@ -1,0 +1,17 @@
+/build/
+/pkgbuild/pkg/
+/pkgbuild/src/
+*.pkg.tar.*
+
+# Local conversations, credentials, and runtime files.
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+.env
+.env.*
+!.env.example
+*.log
+*.bak
+*.hotbox-backup-*
+*.hotbox-disable-*

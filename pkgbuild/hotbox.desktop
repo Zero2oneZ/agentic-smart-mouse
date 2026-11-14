@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Hotbox
+Name[da]=Hotbox
+Comment=Persistent workspace chats and desktop hotbox
+Comment[da]=Vedvarende projektsamtaler og skrivebordsmenu
+Exec=hotbox open
+Icon=hotbox
+Terminal=false
+Categories=Utility;
+StartupWMClass=hotbox
