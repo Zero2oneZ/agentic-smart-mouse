@@ -21,15 +21,16 @@ data.chmod(0o700)
 backups = data / 'backups'
 backups.mkdir(exist_ok=True)
 backups.chmod(0o700)
-stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
-database = data / 'hotbox.sqlite3'
-if database.exists():
-    backup = backups / ('before-update-' + stamp + '.sqlite3')
-    with sqlite3.connect('file:' + str(database) + '?mode=ro', uri=True) as source:
-        with sqlite3.connect(backup) as target:
-            source.backup(target)
-    backup.chmod(0o600)
-    print('Backed up conversations:', backup)
+stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+for name in ('hotbox.sqlite3', 'orchestration.sqlite3'):
+    database = data / name
+    if database.exists():
+        backup = backups / ('before-update-' + stamp + '-' + name)
+        with sqlite3.connect('file:' + str(database) + '?mode=ro', uri=True) as source:
+            with sqlite3.connect(backup) as target:
+                source.backup(target)
+        backup.chmod(0o600)
+        print('Backed up private state:', backup)
 
 runtime = Path(os.environ.get('XDG_RUNTIME_DIR', '/run/user/' + str(os.getuid())))
 endpoint = runtime / 'hotbox-ipc'
@@ -49,10 +50,13 @@ if endpoint.exists():
         pass
 
 binary = home / '.local/bin/hotbox'
-if binary.exists():
-    shutil.copy2(binary, backups / ('hotbox-' + stamp))
+for name in ('hotbox', 'hotbox-core'):
+    previous_binary = home / '.local/bin' / name
+    if previous_binary.exists():
+        shutil.copy2(previous_binary, backups / (name + '-' + stamp))
 files = [
     (root / 'build/hotbox', binary),
+    (root / 'build/hotbox-core', home / '.local/bin/hotbox-core'),
     (root / 'pkgbuild/hotbox.desktop', home / '.local/share/applications/hotbox.desktop'),
     (root / 'pkgbuild/hotbox.svg', home / '.local/share/icons/hicolor/scalable/apps/hotbox.svg'),
 ]

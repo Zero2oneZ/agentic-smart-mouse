@@ -23,6 +23,7 @@ flowchart LR
 
 | Module | Responsibility | Does not do |
 | --- | --- | --- |
+| `tasks.rs` | Fixed local notes tasks, checkpoints, controls and checked report publication | Run arbitrary commands, models or containers |
 | `environment.rs` | Portable backpack contracts, trust-zone validation and nonlaunchable environment plans | Start sandboxes or authorize data promotion |
 | `catalog.rs` | Read-only default catalog, structural validation and digest pinning | Provision storage or persist a live entity graph |
 | `lineage.rs` | Immutable tool versions, development context and fork metadata | Copy Git repositories or create chats |
@@ -42,7 +43,9 @@ release pointer and launches no application.
 
 The Qt app already has local chats, scoped event references, reusable segments,
 managed Git worktrees and a storage architecture registry. These remain implemented
-in C++/QML. The Rust core does not replace them or synchronize with them yet.
+in C++/QML. The Rust core now serves the fixed local notes recipe through a bounded Qt/CLI
+bridge. It does not replace the existing chat/segment stores or connect general
+agent/model execution.
 
 | Existing app | Rust kernel |
 | --- | --- |
@@ -154,3 +157,12 @@ Plan validation is implemented independently of SQL or Qt. All plans explicitly
 remain nonlaunchable; actual backend isolation, resolved identities/storage,
 network brokerage and paired-boundary admission are separate future components.
 An OCI CLI packaging recipe is included but has not been image-built here.
+
+
+## First desktop/core integration
+
+The [local notes workflow](LOCAL_TASKS.md) uses `TaskService` in Qt to invoke named
+core commands with bounded input/output and timeout. Rust owns the separate schema-3
+orchestration database and private task results; Qt owns existing categories/chats.
+The resident app advances steps asynchronously across the local actor's projects.
+This is an implemented vertical slice, not the future generic worker supervisor.

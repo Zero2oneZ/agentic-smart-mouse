@@ -210,3 +210,12 @@ Start with typed plan/decision records, scoped SQL checkpoint/revision checks an
 deterministic private-output fixture. Add model assistance and UI inspection only
 after proposal validation, bounded replanning, wait/stop behavior and acceptance
 checks exist. The proposed prompt and JSON example are not installed runtime code.
+
+
+## First connected product slice — implemented
+
+[Local tasks](LOCAL_TASKS.md) now connects Qt Activity/New task to a fixed Rust notes
+recipe, durable schema-3 checkpoints, safe create-only private reports, pause/continue/
+stop and app-restart recovery. This completes the bounded no-model task slice.
+General supervised process/PTY execution, full agent authoring and smart multi-source
+segmentation remain subsequent milestones; they are not enabled by this recipe.

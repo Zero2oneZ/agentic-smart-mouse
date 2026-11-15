@@ -11,6 +11,29 @@ use std::{
 #[derive(Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case", deny_unknown_fields)]
 enum Command {
+    NotesTick {
+        actor: String,
+    },
+    NotesStart {
+        request: hotbox_core::NotesRequest,
+    },
+    NotesList {
+        actor: String,
+        resource: String,
+    },
+    NotesRead {
+        actor: String,
+        id: String,
+    },
+    NotesAdvance {
+        actor: String,
+        id: String,
+    },
+    NotesControl {
+        actor: String,
+        id: String,
+        action: String,
+    },
     RegisterTool {
         request: hotbox_core::RegisterTool,
     },
@@ -129,6 +152,18 @@ fn execute() -> Result<Value> {
     let command: Command = serde_json::from_slice(&bounded_read(io::stdin().lock())?)?;
     let mut engine = Engine::open(&args[0])?;
     Ok(match command {
+        Command::NotesTick { actor } => serde_json::to_value(engine.tick_notes(&actor)?)?,
+        Command::NotesStart { request } => serde_json::to_value(engine.start_notes(request)?)?,
+        Command::NotesList { actor, resource } => {
+            serde_json::to_value(engine.notes_tasks(&actor, &resource)?)?
+        }
+        Command::NotesRead { actor, id } => serde_json::to_value(engine.notes_task(&actor, &id)?)?,
+        Command::NotesAdvance { actor, id } => {
+            serde_json::to_value(engine.advance_notes(&actor, &id)?)?
+        }
+        Command::NotesControl { actor, id, action } => {
+            serde_json::to_value(engine.control_notes(&actor, &id, &action)?)?
+        }
         Command::RegisterTool { request } => serde_json::to_value(engine.register_tool(request)?)?,
         Command::ToolVersion {
             actor,

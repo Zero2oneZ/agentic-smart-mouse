@@ -16,3 +16,6 @@ SOURCES += src/segmentstore.cpp
 
 HEADERS += src/architecturestore.h
 SOURCES += src/architecturestore.cpp
+
+HEADERS += src/taskservice.h
+SOURCES += src/taskservice.cpp

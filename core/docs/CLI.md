@@ -404,3 +404,11 @@ For image packaging, use `python3 core/scripts/package_image.py --help`.
 `--dry-run` prints build arguments without contacting a daemon. Building requires
 actual reviewed pinned base references, a compatible engine and network/cache access.
 The helper never pushes or starts the image.
+
+
+## Connected local notes recipe
+
+`notes_start`, `notes_list`, `notes_read`, `notes_advance`, `notes_tick` and
+`notes_control` implement the first desktop task flow. See [Local tasks](LOCAL_TASKS.md)
+for request shapes, ownership, atomic publication, state recovery and limits.
+These fixed operations do not enable arbitrary executable, shell or model adapters.

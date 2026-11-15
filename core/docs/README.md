@@ -2,12 +2,13 @@
 
 These documents describe the implementation in `core/` and the agreed direction
 for the larger system. **Implemented** means code exists in this crate. **Target**
-means an intended capability with no claim of runtime availability. The Qt app and
-the Rust kernel remain separate programs and use separate databases.
+means an intended capability with no claim of runtime availability. The Qt app and Rust helper use separate databases; a bounded bridge connects
+the fixed local notes recipe. General orchestration adapters remain separate.
 
 | Start here | Contents |
 | --- | --- |
 | [Whole-product release review](../../docs/PRODUCT_REVIEW.md) | Consolidated user-facing priorities, clean UI, deterministic setup and supervised background work |
+| [Connected local tasks](LOCAL_TASKS.md) | Notes-to-brief UI, durable checkpoints, private results, controls and CLI operations |
 | [Core README](../README.md) | Scope, prerequisites, build commands and quick orientation |
 | [Architecture](ARCHITECTURE.md) | Current components, data ownership, graphs, context routing and target integrations |
 | [System model and catalog](SYSTEM_MODEL.md) | Default categories, IDs, connectivity, agents/harnesses, logs and future ingestion/data engineering |

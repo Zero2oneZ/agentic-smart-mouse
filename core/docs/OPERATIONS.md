@@ -52,14 +52,15 @@ The kernel:
   busy timeout.
 - Commits mutations and corresponding accepted-operation events together using
   immediate transactions.
-- Uses application ID `1212307523` (`0x48425843`) and schema version `2`.
+- Uses application ID `1212307523` (`0x48425843`) and schema version `3`.
 - Rejects unrelated databases and unsupported schema versions instead of adopting
-  them. Only the known kernel schema 1 is upgraded.
+  them. Only known kernel schemas 1/2 are upgraded.
 
-Schema version 2 stores:
+Schema version 3 stores:
 
 | Table | Columns | Meaning |
 | --- | --- | --- |
+| `local_tasks` | `id`, `document` | Immutable notes request, checkpoint, controls and private result references |
 | `tools` | `id`, `resource`, `origin` | Tool identity and optional selected fork ancestor |
 | `tool_versions` | `tool_id`, `version`, `document` | Immutable pinned version metadata |
 | `resources` | `id`, `owner` | Local resource identity and ownership |
@@ -168,12 +169,12 @@ distributable clone. Source history does not grant access to runtime data.
 Do not troubleshoot by injecting desktop input, disabling authorization checks or
 editing checkpoint JSON. The [CLI reference](CLI.md) documents the supported controls.
 
-## Kernel schema 1 → 2
+## Kernel schemas 1/2 → 3
 
-Opening a known schema-1 kernel adds `tools` and `tool_versions` and changes
-`user_version` to 2 in one immediate transaction. Existing runs, grants, resources
-and events are preserved, including live attempts. No Qt database is accepted.
-Schema 2 is not readable by the old binary. Back up the database using SQLite's
-backup API (or a consistent stopped database plus its WAL) before upgrading; revert
-to that backup with the old binary for downgrade. Do not lower `user_version` on a
-live upgraded database. There is no automatic downgrade or runtime activation.
+Opening a known schema-1 or schema-2 database adds the required tool/version tables
+and the fixed local-task table/index, then sets user_version to 3 in one immediate
+transaction. Existing resources, grants, events and active workflow checkpoints are
+preserved. The Qt chat database is separate and never migrated by the core.
+Older core binaries reject schema 3. Use a consistent database backup and matching
+binary for downgrade; do not manually lower user_version. See [Local tasks](LOCAL_TASKS.md)
+for private result storage and interrupted-publication recovery.

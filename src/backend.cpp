@@ -17,7 +17,7 @@
 #include <QUuid>
 #include <QtConcurrent>
 
-Backend::Backend(const QString &directory, QObject *parent) : QObject(parent) {
+Backend::Backend(const QString &directory, QObject *parent, bool automaticTasks) : QObject(parent) {
     m_directory =
         directory.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) : directory;
     QDir().mkpath(m_directory);
@@ -45,6 +45,7 @@ Backend::Backend(const QString &directory, QObject *parent) : QObject(parent) {
         "CREATE TABLE IF NOT EXISTS workspace_git(category INTEGER PRIMARY KEY REFERENCES categories(id), "
         "folder TEXT NOT NULL, branch TEXT NOT NULL, paths TEXT NOT NULL DEFAULT '', remote TEXT NOT NULL "
         "DEFAULT '', automatic INTEGER NOT NULL DEFAULT 0, push INTEGER NOT NULL DEFAULT 0)");
+    m_tasks = std::make_unique<TaskService>(m_directory, automaticTasks);
     m_ledger = std::make_unique<SessionLedger>(m_db);
     m_architecture = std::make_unique<ArchitectureStore>(m_db, *m_ledger, m_directory);
     m_segments = std::make_unique<SegmentStore>(m_db, *m_ledger);
@@ -153,6 +154,7 @@ Backend::~Backend() {
     m_activityPoll.stop();
     m_gitTask.waitForFinished();
     m_segmentPoll.stop();
+    m_tasks.reset();
     m_segments.reset();
     m_architecture.reset();
     m_ledger.reset();
@@ -535,7 +537,9 @@ void Backend::launch(const QString &action, int id) {
     release();
     if (id < 0)
         id = m_current;
-    if (action == "folder") {
+    if (action == "task" || action == "activity") {
+        emit showTasks(action);
+    } else if (action == "folder") {
         QString path = field(id, "folder");
         if (path.isEmpty())
             path = QDir::homePath() + "/Work";

@@ -18,6 +18,15 @@ subsystem. Its release priorities govern the first user-facing slice; the linked
 architecture specifications retain their detailed technical requirements. This
 increment is an audit/design checkpoint, not a completed UI redesign or runner.
 
+## First implementation follow-up
+
+Hotbox 0.5.0 now connects the [local notes recipe](../core/docs/LOCAL_TASKS.md) to
+Activity/New task, with setup checks, real private results, pause/continue/stop and
+restart recovery. IDs/paths stay in Details and older controls move under More
+options. The findings below record the audit baseline; the fixed recipe addresses
+the first end-to-end bridge without implementing generic agents, smart retrieval
+or a persistent process/PTY worker supervisor.
+
 ## Evidence reviewed and fresh verification
 
 Reviewed the current QML views, backend/category/model paths, explicit command runner,

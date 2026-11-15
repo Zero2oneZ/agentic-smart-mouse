@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
         qputenv("QT_QUICK_BACKEND", "software");
     QGuiApplication app(argc, argv);
     app.setApplicationName("hotbox");
-    app.setApplicationVersion("0.4.0");
+    app.setApplicationVersion("0.5.0");
     app.setDesktopFileName("hotbox");
     app.setQuitOnLastWindowClosed(false);
     app.setWindowIcon(QIcon::fromTheme("hotbox"));
@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
             return 1;
         }
     }
-    Backend backend(dataDir);
+    Backend backend(dataDir, nullptr, !headless && !check);
     if (headless) {
         bool valid = false;
         int category = option("--category", "1").toInt(&valid);
@@ -404,7 +404,7 @@ int main(int argc, char **argv) {
         } else if (cmd == "keybindings")
             backend.launch("keybindings");
         else if (cmd == "open")
-            backend.openChat();
+            backend.launch("activity");
     };
     QObject::connect(&server, &QLocalServer::newConnection, &app, [&] {
         while (server.hasPendingConnections()) {
@@ -477,6 +477,15 @@ int main(int argc, char **argv) {
             backend.clearStatus();
             mainWindow->setProperty("page", "architecture");
         });
+        QTimer::singleShot(2800, &app, [&] {
+            backend.tasks()->start("Weekend project", "Choose a quiet reading corner.\nMeasure the wall for shelves.\nReuse the small lamp.\nMeasure the wall for shelves.", 1);
+            mainWindow->setProperty("page", "tasks");
+        });
+        QTimer::singleShot(6500, &app, [&, output] {
+            mainWindow->grabWindow().save(output + "/tasks.png");
+            mainWindow->setProperty("allowClose", true);
+            app.quit();
+        });
         QTimer::singleShot(2600, &app, [&, output] {
             mainWindow->grabWindow().save(output + "/architecture.png");
             QJsonObject result{{"ok", true},
@@ -484,8 +493,6 @@ int main(int argc, char **argv) {
                                {"chat", QFile::exists(output + "/chat.png")},
                                {"hotbox", QFile::exists(output + "/hotbox.png")}};
             QTextStream(stdout) << QJsonDocument(result).toJson(QJsonDocument::Compact) << '\n';
-            mainWindow->setProperty("allowClose", true);
-            app.quit();
         });
     } else if (command != "daemon")
         QTimer::singleShot(0, &app, [&] { handle(command); });

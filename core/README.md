@@ -13,13 +13,16 @@ increments from current fixture functionality.
 It implements immutable tool versions and fork provenance alongside versioned segment contracts, mandatory stage barriers, a validated
 DAG, private SQLite checkpoints, transactional worker leases, bounded retries,
 operation and abstract cost budgets, cancellation, and a local delegation policy
-engine. The fixtures exercise the whole protocol without executing commands.
+engine. The fixtures exercise the workflow protocol without executing commands. A fixed
+[local notes recipe](docs/LOCAL_TASKS.md) now connects the desktop to private durable
+task checkpoints and a create-only report. It does not execute external programs.
 
 **This is a local kernel, not a production security service or build sandbox.**
 Actor strings are supplied by a trusted caller. SQLite file access is privileged
 access to the whole kernel. Authentication, SSH/device keys, OS isolation, real
-build execution, Git changes, release activation, PTC, RAG, Redis, GraphQL, and Qt
-integration are not implemented here. Fixture completion proves protocol behavior;
+build execution, Git changes, release activation, PTC, RAG, Redis, GraphQL and
+general Qt orchestration are not implemented. The fixed desktop notes bridge is
+implemented separately from those adapters. Fixture completion proves protocol behavior;
 it does not claim that an application was built, tested, published, or activated.
 
 ## Build and verify
@@ -147,3 +150,12 @@ are future adapters. A source-only [Containerfile](Containerfile) and
 [build helper](scripts/package_image.py) prepare CLI packaging from reviewed pinned
 bases without publishing or migrating data. The image build remains unverified in
 this environment because Docker socket access is unavailable.
+
+## First connected local recipe
+
+See [Local tasks](docs/LOCAL_TASKS.md) for `notes_start`, `notes_list`, `notes_read`,
+`notes_tick`, `notes_advance` and `notes_control`. This deterministic notes-to-brief
+workflow stores private local tasks and writes a checked Markdown result without
+models, network or subprocess execution. Kernel schema 3 upgrades known schemas
+1/2 additively. The Qt frontend calls only these named operations through a bounded
+helper bridge; general agent/shell execution is not connected.

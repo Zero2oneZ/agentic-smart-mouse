@@ -10,14 +10,15 @@ ApplicationWindow {
  visible: false; title: qsTr("Hotbox — %1").arg(backend.title); color: "#111318"
  Material.theme: Material.Dark; Material.accent: theme.accent; Material.roundedScale: theme.radius
  property bool allowClose: false
- property string page: "chat"
+ property string page: "tasks"
  property int editId: -1
  property int newParent: 0
  property bool helpVisible: false
+ property bool moreOptions: false
  onClosing: function(close) { close.accepted = allowClose; if (!allowClose) hide() }
  Shortcut { sequence: "?"; context: Qt.ApplicationShortcut; enabled: !composer.activeFocus; onActivated: help.open() }
  Shortcut { sequence: "Ctrl+K"; context: Qt.ApplicationShortcut; onActivated: {win.page="bindings";backend.refreshBindings();bindingSearch.forceActiveFocus()} }
- Shortcut { sequence: "Ctrl+N"; context: Qt.ApplicationShortcut; onActivated: win.editCategory(-1,0) }
+ Shortcut { sequence: "Ctrl+N"; context: Qt.ApplicationShortcut; onActivated: {win.page="tasks";tasksView.newTask()} }
  Shortcut { sequence: "Ctrl+,"; context: Qt.ApplicationShortcut; onActivated: settings.open() }
  Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut; onActivated: {backend.release();overlay.visible=false} }
  Shortcut { sequence: "Ctrl+Q"; context: Qt.ApplicationShortcut; onActivated: {win.allowClose=true;Qt.quit()} }
@@ -32,6 +33,7 @@ ApplicationWindow {
  Connections {
   target:backend
   function onShowChat(){win.page="chat";win.reveal();composer.forceActiveFocus()}
+  function onShowTasks(view){win.page="tasks";win.reveal();if(view==="task")tasksView.newTask();if(backend.tasks)backend.tasks.refresh()}
   function onShowBindings(){win.page="bindings";win.reveal();bindingSearch.forceActiveFocus()}
   function onCreateRequested(parent){win.reveal();win.editCategory(-1,parent)}
   function onChanged(){Qt.callLater(function(){feed.positionViewAtEnd()})}
@@ -49,7 +51,9 @@ ApplicationWindow {
       Label {text:"hotbox";font.pixelSize:27;font.weight:Font.DemiBold;Layout.fillWidth:true}
       Label {text:"●";color:theme.accent;font.pixelSize:18}
      }
-     Label {text:qsTr("YOUR WORKSPACES");color:"#858b99";font.pixelSize:10;font.letterSpacing:1.5}
+     Button {text:qsTr("New task");Layout.fillWidth:true;onClicked:{win.page="tasks";tasksView.newTask()}}
+     Button {text:qsTr("Activity");Layout.fillWidth:true;flat:true;onClicked:{win.page="tasks";if(backend.tasks)backend.tasks.refresh()}}
+     Label {text:qsTr("YOUR PROJECTS");color:"#858b99";font.pixelSize:10;font.letterSpacing:1.5}
      ListView {
       Layout.fillWidth:true;Layout.fillHeight:true;clip:true;spacing:5;model:backend.categories
       delegate:Rectangle {
@@ -57,20 +61,21 @@ ApplicationWindow {
        width:ListView.view.width;height:48;radius:theme.radius
        color:backend.currentId===modelData.id?"#252a33":(categoryMouse.containsMouse?"#191d24":"transparent")
        Rectangle {visible:backend.currentId===modelData.id;width:3;height:22;anchors.left:parent.left;anchors.verticalCenter:parent.verticalCenter;color:theme.accent}
-       Label {anchors.fill:parent;anchors.leftMargin:modelData.parent>0?25:13;verticalAlignment:Text.AlignVCenter;text:(modelData.id===1?"◎  ":"▸  ")+modelData.name;elide:Text.ElideRight;color:backend.currentId===modelData.id?"#ffffff":"#b4bac5"}
+       Label {anchors.fill:parent;anchors.leftMargin:modelData.parent>0?25:13;verticalAlignment:Text.AlignVCenter;text:modelData.id===1?qsTr("◎  Home"):"▸  "+modelData.name;elide:Text.ElideRight;color:backend.currentId===modelData.id?"#ffffff":"#b4bac5"}
        MouseArea {id:categoryMouse;anchors.fill:parent;hoverEnabled:true;acceptedButtons:Qt.LeftButton|Qt.RightButton;onClicked:function(mouse){if(mouse.button===Qt.RightButton){categoryContext.categoryId=modelData.id;categoryContext.popup()}else{backend.select(modelData.id);win.page="chat"}}}
       }
      }
-     Button {text:qsTr("+  Add category");Layout.fillWidth:true;onClicked:win.editCategory(-1,0)}
+     Button {text:qsTr("+  New project");Layout.fillWidth:true;onClicked:win.editCategory(-1,0)}
      Rectangle {Layout.fillWidth:true;height:1;color:"#252a33"}
-     Button {text:qsTr("⌨  Keybindings");Layout.fillWidth:true;flat:true;onClicked:{win.page="bindings";backend.refreshBindings();bindingSearch.forceActiveFocus()}}
-     Button {text:qsTr("Reusable segments");Layout.fillWidth:true;flat:true;onClicked:win.page="segments"}
-     Button {text:qsTr("Shared architecture");Layout.fillWidth:true;flat:true;onClicked:win.page="architecture"}
-     Button {text:qsTr("Session timeline");Layout.fillWidth:true;flat:true;onClicked:win.page="timeline"}
-     Button {text:qsTr("Model settings");Layout.fillWidth:true;flat:true;onClicked:settings.open()}
-     Button {text:qsTr("Archived categories");Layout.fillWidth:true;flat:true;onClicked:archiveDialog.open()}
+     Button {visible:win.moreOptions;text:qsTr("⌨  Keybindings");Layout.fillWidth:true;flat:true;onClicked:{win.page="bindings";backend.refreshBindings();bindingSearch.forceActiveFocus()}}
+     Button {text:qsTr("Saved work");Layout.fillWidth:true;flat:true;onClicked:win.page="segments"}
+     Button {visible:win.moreOptions;text:qsTr("Files and storage");Layout.fillWidth:true;flat:true;onClicked:win.page="architecture"}
+     Button {visible:win.moreOptions;text:qsTr("History");Layout.fillWidth:true;flat:true;onClicked:win.page="timeline"}
+     Button {text:qsTr("Settings");Layout.fillWidth:true;flat:true;onClicked:settings.open()}
+     Button {visible:win.moreOptions;text:qsTr("Archived categories");Layout.fillWidth:true;flat:true;onClicked:archiveDialog.open()}
+     Button {text:win.moreOptions?qsTr("Fewer options"):qsTr("More options");Layout.fillWidth:true;flat:true;onClicked:win.moreOptions=!win.moreOptions}
      Label {text:qsTr("Hold Ctrl + Super · 0.3 seconds");color:"#858b99";font.pixelSize:11;Layout.alignment:Qt.AlignHCenter}
-     Button {text:qsTr("Preview hotbox");Layout.fillWidth:true;flat:true;onClicked:backend.preview()}
+     Button {visible:win.moreOptions;text:qsTr("Preview hotbox");Layout.fillWidth:true;flat:true;onClicked:backend.preview()}
     }
    }
    ColumnLayout {
@@ -80,12 +85,12 @@ ApplicationWindow {
      RowLayout {
       anchors.fill:parent;anchors.margins:22
       ColumnLayout {Layout.fillWidth:true;spacing:5
-       Label {text:win.page==="architecture"?qsTr("Shared architecture"):win.page==="segments"?qsTr("Reusable segments"):win.page==="timeline"?qsTr("Session timeline"):(win.page==="bindings"?qsTr("Omarchy keybindings"):backend.title);font.pixelSize:22;font.weight:Font.DemiBold}
-       Label {text:win.page==="bindings"?qsTr("Search shortcuts from your current desktop configuration"):(backend.folder||qsTr("Persistent conversation · local memory"));color:"#9198a6";font.pixelSize:12;elide:Text.ElideMiddle;Layout.fillWidth:true}
+       Label {text:win.page==="tasks"?qsTr("Activity"):win.page==="architecture"?qsTr("Files and storage"):win.page==="segments"?qsTr("Saved work"):win.page==="timeline"?qsTr("History"):(win.page==="bindings"?qsTr("Omarchy keybindings"):backend.title);font.pixelSize:22;font.weight:Font.DemiBold}
+       Label {text:win.page==="tasks"?qsTr("Your tasks, progress, and results"):win.page==="bindings"?qsTr("Search shortcuts from your current desktop configuration"):(backend.folder||qsTr("Persistent conversation · local memory"));color:"#9198a6";font.pixelSize:12;elide:Text.ElideMiddle;Layout.fillWidth:true}
       }
       Button {visible:win.page==="chat";text:qsTr("Project brief");onClicked:win.editCategory(backend.currentId,0)}
       Button {visible:win.page==="chat";text:qsTr("Folder");onClicked:backend.launch("folder")}
-      Button {text:win.page==="timeline"?qsTr("Chat"):qsTr("Timeline");onClicked:win.page=win.page==="timeline"?"chat":"timeline"}
+      Button {visible:win.page!=="tasks";text:win.page==="timeline"?qsTr("Chat"):qsTr("Timeline");onClicked:win.page=win.page==="timeline"?"chat":"timeline"}
       Button {text:"?";onClicked:help.open()}
      }
     }
@@ -155,6 +160,7 @@ ApplicationWindow {
       }
      }
     }
+    Tasks {id:tasksView;visible:win.page==="tasks";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:22}
     Segments {objectName:"segmentsView";visible:win.page==="segments";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
     Architecture {visible:win.page==="architecture";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
     Timeline {owner:win;visible:win.page==="timeline";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
@@ -204,7 +210,7 @@ ApplicationWindow {
   }
  }
  Dialog {id:help;anchors.centerIn:parent;width:520;modal:true;title:qsTr("Hotbox controls");standardButtons:Dialog.Close
-  Label {width:parent.width;wrapMode:Text.Wrap;text:qsTr("Hold Ctrl + Super for 0.3 seconds to spread the menu at your pointer. Release either key to retract. Click an item to choose; right-click for deeper options. Double-click the center for master chat.\n\nCtrl+K: search keybindings\nCtrl+N: add category\nCtrl+,: model settings\nCtrl+Q: quit Hotbox\n?: this help\n\nThe Preview hotbox button opens a click-controlled preview. Click the background to dismiss it.")}
+  Label {width:parent.width;wrapMode:Text.Wrap;text:qsTr("Hold Ctrl + Super for 0.3 seconds to spread the menu at your pointer. Release either key to retract. Click an item to choose; right-click for deeper options. Double-click the center for master chat.\n\nCtrl+K: search keybindings\nCtrl+N: new task\nCtrl+,: model settings\nCtrl+Q: quit Hotbox\n?: this help\n\nThe Preview hotbox button opens a click-controlled preview. Click the background to dismiss it.")}
  }
  Hotbox {id:overlay;objectName:"hotboxOverlay";owner:win}
 }

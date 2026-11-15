@@ -6,6 +6,7 @@
 | --- | --- |
 | [Cargo.toml](../Cargo.toml) and [Cargo.lock](../Cargo.lock) | Package, dependency and compiler requirements |
 | [lib.rs](../src/lib.rs) | Public exports and typed errors |
+| [tasks.rs](../src/tasks.rs) | Fixed local notes recipe, durable task controls and create-only results |
 | [environment.rs](../src/environment.rs) | Typed backpack requirements and read-only portable environment plans |
 | [catalog.rs](../src/catalog.rs) | Typed system catalog, structural validation and hashing |
 | [lineage.rs](../src/lineage.rs) | Immutable tool versions, selected development contexts and fork metadata |
@@ -45,7 +46,7 @@ replay, deadline and fixture boundaries.
 
 ## Current test coverage
 
-The existing suite has 36 library integration tests (24 kernel, five catalog and seven environment tests). This table names the tests so
+The existing suite has 46 library integration tests (24 kernel, five catalog, seven environment and ten local-task tests). This table names the tests so
 behavior can be traced directly to executable checks.
 
 | Test | Behavior covered |
@@ -107,7 +108,7 @@ update, not a magic string in a stored template.
 
 ## Schema and policy changes
 
-Kernel schema 2 includes a transactional additive migration from schema 1; there is no general migration framework.
+Kernel schema 3 includes transactional additive migrations from schemas 1 and 2; there is no general migration framework.
 Do not change stored run/grant JSON compatibility while silently keeping the same
 schema identifier. Define migration direction, backup requirements and failure
 behavior; test both an empty installation and existing accepted checkpoints.
@@ -149,3 +150,9 @@ runs to reject mutable/injected base references and invalid engine/tag inputs an
 check the narrow build context. CLI fixtures validate backpacks, plan environments,
 reject trust crossings and confirm no database side effects. Run them all with
 `core/scripts/check`; no container daemon is needed for this suite.
+
+The local-task suite covers restart/resume, pause/cancel, owner boundaries, immutable
+start replay, conflicting results, interrupted publication recovery, independent
+project queues, bounded inputs, migration and symlinks. The CLI fixture exercises
+these operations across fresh processes. Qt's real-helper tests live in
+`tests/hotbox_tests.cpp` and use only synthetic inputs and temporary state.

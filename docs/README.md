@@ -1,12 +1,13 @@
 # Project documentation
 
-The project currently contains a working local Qt desktop app and a separate Rust
-orchestration foundation. They have different runtime responsibilities and databases.
+The project contains a Qt desktop app and a Rust task/orchestration core. A bounded
+bridge connects the local notes workflow; chat and orchestration use separate databases.
 
 | Documentation | Use it for |
 | --- | --- |
 | [Whole-product review](PRODUCT_REVIEW.md) | First-release priorities, plain-language UI, deterministic setup, headless workers, naming and segmentation |
 | [Project README](../README.md) | Desktop installation, activation gesture, chats, model setup, Git, session segments and shared storage |
+| [Local task workflow](../core/docs/LOCAL_TASKS.md) | New task/Activity, checked private results, controls, recovery and CLI |
 | [Rust core README](../core/README.md) | Standalone deterministic kernel scope and quick start |
 | [Rust documentation index](../core/docs/README.md) | Architecture, contracts, all CLI commands, governance, operations and developer references |
 | [Agents builder plan](../core/docs/AGENT_BUILDER_PLAN.md) | Planned Hotbox Agents category, mandatory authoring flow and runtime requirements |

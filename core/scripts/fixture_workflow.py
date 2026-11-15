@@ -128,4 +128,17 @@ with tempfile.TemporaryDirectory(prefix="hotbox-core-cli-") as temporary:
     assert fork["forked_from"] == {"tool_id": "player", "version": "1.0.0"}
     call("tool_context", actor="alice", grant_id="alice-root", tool_id="player-fork", version="1.0.0", succeeds=False)
 
-print("CLI fixture passed: segmented build, restart/resume, immutable template, audit events, delegated revocation, independent access, immutable tool versions, fork lineage and catalog validation and portable environment planning.")
+    notes = {"id": "wrun-notes", "actor": "alice", "resource": "project",
+             "title": "Weekend project", "notes": "Measure the wall.\nReuse the lamp.\nMeasure the wall."}
+    call("notes_start", request=notes)
+    call("notes_control", actor="alice", id=notes["id"], action="pause")
+    assert call("notes_tick", actor="alice") is None
+    call("notes_control", actor="alice", id=notes["id"], action="resume")
+    for _ in range(4):
+        task = call("notes_tick", actor="alice")
+    assert task["status"] == "complete" and task["note_count"] == 2
+    assert Path(task["result_path"]).read_text().count("Measure the wall.") == 1
+    assert call("notes_read", actor="alice", id=notes["id"])["status"] == "complete"
+    call("notes_read", actor="bob", id=notes["id"], succeeds=False)
+
+print("CLI fixture passed: segmented build, restart/resume, immutable template, audit events, delegated revocation, independent access, immutable tool versions, fork lineage and catalog validation portable environment planning and local notes tasks.")

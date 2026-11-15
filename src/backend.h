@@ -2,6 +2,7 @@
 #include "architecturestore.h"
 #include "segmentstore.h"
 #include "sessionledger.h"
+#include "taskservice.h"
 #include <QFutureWatcher>
 #include <QJsonArray>
 #include <QNetworkAccessManager>
@@ -16,6 +17,7 @@
 
 class Backend : public QObject {
     Q_OBJECT
+    Q_PROPERTY(TaskService *tasks READ tasks CONSTANT)
     Q_PROPERTY(QVariantList categories READ categories NOTIFY changed)
     Q_PROPERTY(QVariantMap architecture READ architecture NOTIFY activityChanged)
     Q_PROPERTY(QVariantList messages READ messages NOTIFY changed)
@@ -36,8 +38,9 @@ class Backend : public QObject {
     Q_PROPERTY(QString model READ model NOTIFY settingsChanged)
     Q_PROPERTY(QString keyVariable READ keyVariable NOTIFY settingsChanged)
   public:
-    explicit Backend(const QString &directory = {}, QObject *parent = nullptr);
+    explicit Backend(const QString &directory = {}, QObject *parent = nullptr, bool automaticTasks = true);
     ~Backend() override;
+    TaskService *tasks() const { return m_tasks.get(); }
     QVariantList categories() const;
     QVariantMap architecture() const;
     Q_INVOKABLE QVariantMap architectureAction(const QString &action,
@@ -109,6 +112,7 @@ class Backend : public QObject {
     void showMenu();
     void showChat();
     void showBindings();
+    void showTasks(const QString &view);
     void createRequested(int parent);
 
   private:
@@ -122,6 +126,7 @@ class Backend : public QObject {
     void collectTools(const QJsonObject &delta);
     QJsonArray toolDefinitions() const;
     void gitTask(const QString &operation, int category);
+    std::unique_ptr<TaskService> m_tasks;
     std::unique_ptr<SessionLedger> m_ledger;
     std::unique_ptr<ArchitectureStore> m_architecture;
     std::unique_ptr<SegmentStore> m_segments;

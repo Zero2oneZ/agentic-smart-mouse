@@ -19,7 +19,7 @@ Window {
  function resetMenu(){currentParent=0;stack=[];contextItem={};rebuild()}
  function rebuild(){
   var items=[]
-  if(currentParent===0)items=[{name:qsTr("Folder"),glyph:"▱",action:"folder"},{name:qsTr("Tools"),glyph:"⚒",action:"tools"},{name:qsTr("Generate"),glyph:"✧",action:"generate"},{name:qsTr("Browser"),glyph:"↗",action:"browser"},{name:qsTr("Keybindings"),glyph:"⌨",action:"keybindings"}]
+  if(currentParent===0)items=[{name:qsTr("New task"),glyph:"+",action:"task"},{name:qsTr("Activity"),glyph:"◷",action:"activity"},{name:qsTr("Folder"),glyph:"▱",action:"folder"},{name:qsTr("Tools"),glyph:"⚒",action:"tools"},{name:qsTr("Browser"),glyph:"↗",action:"browser"}]
   else if(currentParent===-1)items=[{name:qsTr("Terminal"),glyph:">_",action:"terminal"},{name:qsTr("Open folder"),glyph:"▱",action:"folder"},{name:qsTr("Keybindings"),glyph:"⌨",action:"keybindings"}]
   else items=[{name:qsTr("Open chat"),glyph:"◎",action:"chat",id:currentParent},{name:qsTr("Open folder"),glyph:"▱",action:"folder",id:currentParent}]
   var children=currentParent<0?[]:backend.children(currentParent)

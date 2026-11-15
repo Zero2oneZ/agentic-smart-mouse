@@ -702,6 +702,85 @@ class HotboxTests : public QObject {
         QVERIFY(source.open(QIODevice::ReadOnly));
         QCOMPARE(source.readAll(), QByteArray("user source content"));
     }
+    void notesTasksRecoverAndFinishWithoutAWindow() {
+        const QByteArray previous = qgetenv("HOTBOX_CORE_BINARY");
+        const QString helper = QDir(QCoreApplication::applicationDirPath()).absoluteFilePath("../hotbox-core");
+        QVERIFY(QFileInfo(helper).isExecutable());
+        qputenv("HOTBOX_CORE_BINARY", helper.toUtf8());
+        QTemporaryDir dir;
+        QString id;
+        {
+            Backend b(dir.path());
+            auto *service = b.tasks();
+            QVERIFY(service);
+            QTest::qWait(100);
+            QTRY_VERIFY(!service->busy());
+            QVERIFY2(service->available(), qPrintable(service->problem()));
+            service->start("Weekend project", "Measure the wall.\nReuse the lamp.\nMeasure the wall.", 1);
+            QTRY_VERIFY(!service->selected().isEmpty());
+            QTRY_VERIFY(!service->busy());
+            id = service->selected()["id"].toString();
+            service->control("pause");
+            QTRY_COMPARE(service->selected()["status"].toString(), QString("paused"));
+        }
+        {
+            Backend b(dir.path());
+            auto *service = b.tasks();
+            QTRY_COMPARE(service->jobs().size(), 1);
+            QTRY_VERIFY(!service->busy());
+            service->select(id);
+            QTRY_COMPARE(service->selected()["status"].toString(), QString("paused"));
+            QTRY_VERIFY(!service->busy());
+            service->control("resume");
+            QTRY_COMPARE_WITH_TIMEOUT(service->selected()["status"].toString(), QString("complete"), 10000);
+            QFile result(service->selected()["result_path"].toString());
+            QVERIFY(result.open(QIODevice::ReadOnly));
+            const auto text = result.readAll();
+            QVERIFY(text.contains("2 unique notes"));
+            QCOMPARE(text.count("Measure the wall."), 1);
+            QVERIFY(service->problem().isEmpty());
+        }
+        if (previous.isNull()) qunsetenv("HOTBOX_CORE_BINARY"); else qputenv("HOTBOX_CORE_BINARY", previous);
+    }
+    void taskScreenRunsFromFormAndSurvivesWindowHide() {
+        const QByteArray previous = qgetenv("HOTBOX_CORE_BINARY");
+        qputenv("HOTBOX_CORE_BINARY", QDir(QCoreApplication::applicationDirPath()).absoluteFilePath("../hotbox-core").toUtf8());
+        QTemporaryDir dir;
+        {
+            Backend b(dir.path());
+            Theme theme(dir.path());
+            Translator translator(dir.filePath("language"), dir.path());
+            QQmlApplicationEngine engine;
+            QStringList warnings;
+            connect(&engine, &QQmlEngine::warnings, this, [&](const QList<QQmlError> &errors) {for (const auto &e : errors) warnings << e.toString();});
+            engine.rootContext()->setContextProperty("backend", &b);
+            engine.rootContext()->setContextProperty("theme", &theme);
+            engine.rootContext()->setContextProperty("translator", &translator);
+            engine.load(QUrl("qrc:/Main.qml"));
+            QVERIFY2(!engine.rootObjects().isEmpty(), qPrintable(warnings.join('\n')));
+            auto *win = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+            auto *view = win->findChild<QObject *>("tasksView");
+            QVERIFY(view);
+            win->show();
+            QTest::qWait(100);
+            QTRY_VERIFY(!b.tasks()->busy());
+            QVERIFY(QMetaObject::invokeMethod(view, "newTask"));
+            auto *title = win->findChild<QObject *>("taskTitle");
+            auto *notes = win->findChild<QObject *>("taskNotes");
+            auto *start = win->findChild<QObject *>("startTaskButton");
+            QVERIFY(title && notes && start);
+            title->setProperty("text", "Reading corner");
+            notes->setProperty("text", "Measure the wall.\nPick a chair.");
+            QTRY_VERIFY(start->property("enabled").toBool());
+            QVERIFY(QMetaObject::invokeMethod(start, "clicked"));
+            win->hide();
+            QTRY_COMPARE_WITH_TIMEOUT(b.tasks()->selected()["status"].toString(), QString("complete"), 10000);
+            QVERIFY(QFileInfo::exists(b.tasks()->selected()["result_path"].toString()));
+            win->show();
+            QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join('\n')));
+        }
+        if (previous.isNull()) qunsetenv("HOTBOX_CORE_BINARY"); else qputenv("HOTBOX_CORE_BINARY", previous);
+    }
     void qmlLoadsAndCenterOpensMaster() {
         QTemporaryDir dir;
         Backend b(dir.path());

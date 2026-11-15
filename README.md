@@ -2,20 +2,29 @@
 
 # Hotbox
 
-A native Omarchy hotbox with persistent category chats, project briefs, folder links, and live shortcut search.
+A native Omarchy hotbox for local tasks, persistent project chats and saved work.
+
+Open Hotbox and choose **Try sample notes** or **New task**. Paste notes, start the
+task, and watch Prepare → Organize → Check → Save. The result is a private Markdown
+brief you can preview or open. No model connection, terminal or VM is required.
+Tasks support Pause, Continue and Stop, survive window closure and resume from a
+saved step after an app restart. IDs and file paths stay under Details.
+
+See [the local task workflow](core/docs/LOCAL_TASKS.md) for limits, storage and CLI
+commands. This first recipe uses ordinary deterministic code. It does not launch
+arbitrary commands or autonomous agents.
 
 The [whole-product review](docs/PRODUCT_REVIEW.md) sets the next release priorities:
 a clean task-first interface, guided setup, deterministic execution, supervised
 headless work, readable names and automatic scoped evidence segmentation. It
-separates implemented behavior from the broader architecture plans. The running
-app remains a prototype; Agents, swarm planning and sandbox runners are not yet
-connected to it.
+separates implemented behavior from the broader architecture plans. The app now has one connected deterministic task flow; Agents, swarm planning
+and sandbox runners remain planned.
 
 A separate [Rust orchestration core](core/README.md) now provides a tested local
 foundation for mandatory segmented workflows, SQL checkpoints, bounded execution
 loops and delegated-permission rules. Its [implementation plan](core/docs/PLAN.md)
-defines the remaining service, isolation and PTC work. This core currently runs
-deterministic fixtures; it is not connected to the desktop app or a model provider.
+defines the remaining service, isolation and PTC work. The core is connected to the desktop for the fixed local notes recipe. General
+swarm execution and model/provider orchestration remain unconnected.
 
 See the [project documentation index](docs/README.md) and the
 [Rust core reference](core/docs/README.md) for architecture, executable contracts,
@@ -27,7 +36,7 @@ The global shortcut observes Ctrl and Super without consuming them. Left and rig
 
 ## Build and run
 
-`bin/build`, `bin/test`, then `build/hotbox open`. Install system-wide with `bin/install`, or use `bin/install-local` for an atomic user-local update with a database backup and resident-app restart. `hotbox daemon` runs in the background; `hotbox open` opens the chat; `hotbox menu` previews the hotbox; `hotbox release` dismisses it; `hotbox keybindings` opens shortcut search; `hotbox quit` stops the resident app.
+`bin/build`, `bin/test`, then `build/hotbox open`. Install system-wide with `bin/install`, or use `bin/install-local` for an atomic user-local update with a database backup and resident-app restart. `hotbox daemon` runs in the background; `hotbox open` opens Activity; `hotbox menu` previews the hotbox; `hotbox release` dismisses it; `hotbox keybindings` opens shortcut search; `hotbox quit` stops the resident app.
 
 `hotbox check --json` reports database and model configuration status without a display. `hotbox --smoke OUTPUT_DIRECTORY` renders sample chat and menu screenshots offscreen, using an isolated database.
 
@@ -37,7 +46,7 @@ The development machine uses a user-local install: executable in `~/.local/bin/h
 
 ## Verification
 
-Twenty-one Qt Test checks cover the application. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, context-tool round trips, architecture registration, shared-library reuse, and preservation of user files. Offscreen screenshots use sample content. The live overlay rendered successfully; the previous Tab + Q shortcut failed verification. The replacement Ctrl + Super bindings passed Lua callback checks and loaded in Hyprland without configuration errors; they still require a physical-keyboard check. Keep desktop keyboard injection out of further automated checks.
+Twenty-three Qt Test checks cover the application. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, context-tool round trips, architecture registration, shared-library reuse, and preservation of user files. Offscreen screenshots use sample content. The live overlay rendered successfully; the previous Tab + Q shortcut failed verification. The replacement Ctrl + Super bindings passed Lua callback checks and loaded in Hyprland without configuration errors; they still require a physical-keyboard check. Keep desktop keyboard injection out of further automated checks.
 
 ## Model connection
 
@@ -56,7 +65,7 @@ SQLite in `~/.local/share/hotbox/hotbox.sqlite3` stores category hierarchy, mess
 | Hold Ctrl + Super | Hotbox after 300 ms |
 | Release either key | Retract without launching |
 | Ctrl+K | Search Omarchy bindings |
-| Ctrl+N | Add category |
+| Ctrl+N | New task |
 | Ctrl+, | Model settings |
 | Enter / Shift+Enter | Send / newline |
 | Ctrl+Q | Quit resident app |
@@ -153,7 +162,8 @@ Everything remains local unless you explicitly export it. No external database c
 
 ![Shared architecture with sample content](docs/architecture.png)
 
-Open **Shared architecture** in the sidebar. From **Master chat**, initialize two empty roots (defaults shown below). Hotbox initializes a local Git monorepo for templates and project source, with an initial architecture commit. If master chat has no linked folder, it links this root. Existing linked repositories are left alone. No remote or automatic push is configured for this new monorepo. The development machine runs Hotbox 0.4.0 with both default roots initialized.
+Open **Shared architecture** in the sidebar. From **Master chat**, initialize two empty roots (defaults shown below). Hotbox initializes a local Git monorepo for templates and project source, with an initial architecture commit. If master chat has no linked folder, it links this root. Existing linked repositories are left alone. No remote or automatic push is configured for this new monorepo. The default architecture roots were initialized with Hotbox 0.4.0; the local task
+workflow is introduced in 0.5.0.
 
 ```text
 ~/.local/share/hotbox/development/       Tool-managed Git tree
@@ -209,10 +219,10 @@ runtime bindings and the original tool unchanged. This is a local registry, not 
 Git copy operation or a connected Edit/Fork UI. Reviewed plans and contribution
 agreements remain future work. See [core CLI](core/docs/CLI.md#tool-lineage-registry).
 
-The core check suite covers 36 Rust integration tests, three packaging admission tests
+The core check suite covers 46 Rust integration tests, three packaging admission tests
 and the multi-process CLI fixture.
-It runs independently of the installed Qt application. Kernel schema 1 upgrades
-transactionally to schema 2; back up the separate kernel database before opening it
+It runs independently of the installed Qt application. Kernel schemas 1 and 2 upgrade
+transactionally to schema 3; back up the separate kernel database before opening it
 with this version. The Qt chat database is never migrated by the core.
 
 
@@ -310,7 +320,7 @@ catalog. This is a specification/template increment, not an activated planner.
 
 ## Whole-product audit checkpoint
 
-The current audit passed the build, 21 offscreen Qt checks, the headless desktop
+The pre-task audit passed the build, 21 offscreen Qt checks, the headless desktop
 CLI workflow, 36 Rust integration tests, three packaging tests and the core CLI
 fixture. Desktop checks need local mock-server socket access and a writable private
 runtime directory. These checks do not establish novice usability, headless worker
@@ -319,3 +329,26 @@ matching the current activation gesture; existing screenshots may show older tex
 See the [product review](docs/PRODUCT_REVIEW.md) for ranked gaps, recommended features,
 plain-language vocabulary and release acceptance gates. No installed app or desktop
 configuration is changed by this source/documentation checkpoint.
+
+
+## Local task release checkpoint
+
+Hotbox 0.5.0 adds the connected [notes workflow](core/docs/LOCAL_TASKS.md), a cleaner
+Activity screen, plain-language result controls and setup checking. Legacy storage,
+shortcut and history controls remain under More options; Saved work retains the
+existing segment features. Source builds now require Cargo as well as Qt. Fetch
+locked Rust dependencies with `cargo fetch --manifest-path core/Cargo.toml --locked`
+before an offline build. Both app and helper must be installed together.
+
+The generic task/agent planner and process/PTY supervisor remain future work. The
+resident Qt app advances this bounded local recipe; it is not an independent worker
+service. Personal notes/results stay outside source Git and are not provider inputs.
+
+
+![Local tasks with sample notes](docs/tasks.png)
+
+Verified for this release: 23 offscreen Qt checks, 46 Rust integration tests, three
+packaging checks, both CLI workflows and a sample-only offscreen task preview.
+Tests include form submission, window hiding, pause/restart/continue, create-only
+publication and refusal to save changed checked outputs. Installed Hotbox 0.5.0 bundles the Rust helper and uses kernel schema 3 for local
+task state.

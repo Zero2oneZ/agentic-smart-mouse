@@ -2,6 +2,9 @@
 set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 mkdir -p "$ROOT/build"
+CARGO="${CARGO:-cargo}"
+"$CARGO" build --manifest-path "$ROOT/core/Cargo.toml" --target-dir "$ROOT/core/target" --locked --release
+cp "$ROOT/core/target/release/hotbox-core" "$ROOT/build/hotbox-core"
 cd "$ROOT/build"
 qmake6 "$ROOT/hotbox.pro"
 make -j4

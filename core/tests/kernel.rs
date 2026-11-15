@@ -758,7 +758,7 @@ fn schema_one_migration_preserves_inflight_work_and_grants() {
     let claim = f.claim();
     // Reconstruct the v1 schema while retaining a real checkpoint and permission tree.
     let db = rusqlite::Connection::open(f.root.0.join("kernel.sqlite3")).unwrap();
-    db.execute_batch("DROP TABLE tool_versions; DROP TABLE tools; PRAGMA user_version=1;")
+    db.execute_batch("DROP TABLE tool_versions; DROP TABLE tools; DROP TABLE local_tasks; PRAGMA user_version=1;")
         .unwrap();
     drop(db);
     drop(f.engine);
@@ -774,5 +774,5 @@ fn schema_one_migration_preserves_inflight_work_and_grants() {
     let version: i64 = db
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 2);
+    assert_eq!(version, 3);
 }
