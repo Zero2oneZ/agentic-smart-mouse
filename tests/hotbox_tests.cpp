@@ -781,6 +781,65 @@ class HotboxTests : public QObject {
         }
         if (previous.isNull()) qunsetenv("HOTBOX_CORE_BINARY"); else qputenv("HOTBOX_CORE_BINARY", previous);
     }
+    void explicitRecordingsPauseOnRestartAndKeepPrivateDrafts() {
+        QTemporaryDir dir;
+        QString demo;
+        {
+            Backend b(dir.path());auto *r=b.recorder();
+            QVERIFY(r->start("Morning routine"));demo=r->current()["id"].toString();
+            QVERIFY(r->addUrl("https://example.org/news?q=private&token=never-save#login"));
+            r->action("browser","Open browser");r->action("keyboard_text","never save typed keys");
+            QCOMPARE(r->current()["count"].toInt(),2);
+            r->togglePause();QVERIFY(!r->addNote("not recorded"));
+            r->togglePause();
+            {Backend reader(dir.path(),nullptr,false);QCOMPARE(r->current()["state"].toString(),QString("recording"));}
+        }
+        {
+            Backend b(dir.path());auto *r=b.recorder();QCOMPARE(r->current()["state"].toString(),QString("paused"));
+            r->stop();QVERIFY(r->makeDraft("Morning helper"));QCOMPARE(r->draft()["state"].toString(),QString("draft"));
+            QVERIFY(!r->draft()["enabled"].toBool());
+            QVERIFY(!QJsonDocument(QJsonObject::fromVariantMap(r->current())).toJson().contains("never-save"));
+        }
+        {
+            Backend b(dir.path());b.recorder()->select(demo);QCOMPARE(b.recorder()->draft()["name"].toString(),QString("Morning helper"));
+        }
+    }
+    void browserImportsOmitValuesAndRejectUnsupportedActions() {
+        QTemporaryDir dir;Backend b(dir.path());auto *r=b.recorder();
+        auto write=[&](const QJsonObject &object){QFile file(dir.filePath("browser.json"));if(!file.open(QIODevice::WriteOnly))return false;file.write(QJsonDocument(object).toJson());return true;};
+        QJsonArray steps{QJsonObject{{"kind","navigate"},{"url","https://example.org/search?token=never-save#private"}},
+            QJsonObject{{"kind","input_field"},{"url","https://example.org/search"},{"target","Search"},{"value","private-typed-value"},{"cookies","secret-cookie"}},
+            QJsonObject{{"kind","input_field"},{"url","https://example.org/login"},{"target","Password"},{"value","typed-password"}}};
+        QVERIFY(write({{"format","hotbox-demonstration-v1"},{"steps",steps},{"cookies","secret-cookie"}}));
+        QVERIFY2(r->importBrowser(QUrl::fromLocalFile(dir.filePath("browser.json"))),qPrintable(r->problem()));
+        QCOMPARE(r->current()["count"].toInt(),2);QCOMPARE(r->current()["state"].toString(),QString("stopped"));
+        QVERIFY(r->makeDraft("Search helper"));QCOMPARE(r->draft()["parameters"].toStringList().size(),1);
+        const auto payload=QJsonDocument(QJsonObject::fromVariantMap(r->current())).toJson()+QJsonDocument(QJsonObject::fromVariantMap(r->draft())).toJson();
+        for(const auto &secret:QList<QByteArray>{"never-save","private-typed-value","secret-cookie","typed-password"})QVERIFY(!payload.contains(secret));
+        const int count=r->history().size();steps.append(QJsonObject{{"kind","execute_script"},{"script","untrusted"}});
+        QVERIFY(write({{"format","hotbox-demonstration-v1"},{"steps",steps}}));QVERIFY(!r->importBrowser(QUrl::fromLocalFile(dir.filePath("browser.json"))));QCOMPARE(r->history().size(),count);
+        QVERIFY(Demonstrations::safeUrl("https://user:secret@example.org/").isEmpty());
+        QCOMPARE(Demonstrations::safeUrl("https://example.org/profile/alice"),QString("https://example.org/"));
+    }
+    void keypadCyclesOnlyWhileFocusedAndOpensGuidedTasks() {
+        QTemporaryDir dir;Backend b(dir.path());Theme theme(dir.path());Translator translator(dir.filePath("language"),dir.path());
+        QQmlApplicationEngine engine;QStringList warnings;
+        connect(&engine,&QQmlEngine::warnings,this,[&](const QList<QQmlError>&errors){for(const auto&e:errors)warnings<<e.toString();});
+        engine.rootContext()->setContextProperty("backend",&b);engine.rootContext()->setContextProperty("theme",&theme);engine.rootContext()->setContextProperty("translator",&translator);
+        engine.load(QUrl("qrc:/Main.qml"));QVERIFY2(!engine.rootObjects().isEmpty(),qPrintable(warnings.join('\n')));
+        auto *win=qobject_cast<QQuickWindow*>(engine.rootObjects().first());auto *panel=win->findChild<QObject*>("keypadPanel");QVERIFY(panel);win->show();
+        b.setQuickIndex(0);QVERIFY(QMetaObject::invokeMethod(panel,"open"));QTRY_VERIFY(panel->property("opened").toBool());
+        QTest::keyClick(win,Qt::Key_4,Qt::KeypadModifier);QCOMPARE(b.quickIndex(),3);
+        QTest::keyClick(win,Qt::Key_5,Qt::KeypadModifier);QCOMPARE(b.quickIndex(),0);
+        QTest::keyClick(win,Qt::Key_4);QCOMPARE(b.quickIndex(),0);
+        QTest::keyClick(win,Qt::Key_Left,Qt::KeypadModifier);QCOMPARE(b.quickIndex(),3);
+        QTest::keyClick(win,Qt::Key_Clear,Qt::KeypadModifier);QCOMPARE(b.quickIndex(),0);
+        QTest::keyClick(win,Qt::Key_Enter);QTRY_VERIFY(!panel->property("visible").toBool());QVERIFY(b.currentId()>1);QCOMPARE(b.title(),QString("Research"));QVERIFY(!b.busy());
+        win->setProperty("page","tasks");auto *view=win->findChild<QObject*>("tasksView");QVERIFY(QMetaObject::invokeMethod(view,"newTask"));QTest::qWait(50);
+        auto *title=win->findChild<QObject*>("taskTitle");QVERIFY(title);title->setProperty("text",QString());
+        QTest::keyClick(win,Qt::Key_4,Qt::KeypadModifier);QCOMPARE(title->property("text").toString(),QString("4"));
+        QVERIFY2(warnings.isEmpty(),qPrintable(warnings.join('\n')));
+    }
     void qmlLoadsAndCenterOpensMaster() {
         QTemporaryDir dir;
         Backend b(dir.path());

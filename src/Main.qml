@@ -16,11 +16,10 @@ ApplicationWindow {
  property bool helpVisible: false
  property bool moreOptions: false
  onClosing: function(close) { close.accepted = allowClose; if (!allowClose) hide() }
- Shortcut { sequence: "?"; context: Qt.ApplicationShortcut; enabled: !composer.activeFocus; onActivated: help.open() }
+ Shortcut { sequence: "?"; context: Qt.ApplicationShortcut; enabled: !composer.activeFocus&&!keypad.visible&&win.page!=="tasks"&&win.page!=="recordings"; onActivated: help.open() }
  Shortcut { sequence: "Ctrl+K"; context: Qt.ApplicationShortcut; onActivated: {win.page="bindings";backend.refreshBindings();bindingSearch.forceActiveFocus()} }
  Shortcut { sequence: "Ctrl+N"; context: Qt.ApplicationShortcut; onActivated: {win.page="tasks";tasksView.newTask()} }
  Shortcut { sequence: "Ctrl+,"; context: Qt.ApplicationShortcut; onActivated: settings.open() }
- Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut; onActivated: {backend.release();overlay.visible=false} }
  Shortcut { sequence: "Ctrl+Q"; context: Qt.ApplicationShortcut; onActivated: {win.allowClose=true;Qt.quit()} }
  function editCategory(id,parent) {
   editId=id;newParent=parent
@@ -29,10 +28,13 @@ ApplicationWindow {
   categoryName.text=item?item.name:"";categoryFolder.text=item?item.folder:"";categoryBrief.text=item?item.brief:""
   editor.open()
  }
+ function openTaskComposer(){tasksView.newTask()}
+ function openRecordingNote(){recordingsView.addNote()}
  function reveal() {show();raise();requestActivate()}
  Connections {
   target:backend
   function onShowChat(){win.page="chat";win.reveal();composer.forceActiveFocus()}
+  function onShowKeypad(){win.reveal();keypad.open()}
   function onShowTasks(view){win.page="tasks";win.reveal();if(view==="task")tasksView.newTask();if(backend.tasks)backend.tasks.refresh()}
   function onShowBindings(){win.page="bindings";win.reveal();bindingSearch.forceActiveFocus()}
   function onCreateRequested(parent){win.reveal();win.editCategory(-1,parent)}
@@ -51,14 +53,20 @@ ApplicationWindow {
       Label {text:"hotbox";font.pixelSize:27;font.weight:Font.DemiBold;Layout.fillWidth:true}
       Label {text:"●";color:theme.accent;font.pixelSize:18}
      }
+     Button {text:qsTr("Keyboard controls");Layout.fillWidth:true;onClicked:keypad.open()}
+     Button {text:qsTr("Teach a helper");Layout.fillWidth:true;flat:true;onClicked:win.page="recordings"}
      Button {text:qsTr("New task");Layout.fillWidth:true;onClicked:{win.page="tasks";tasksView.newTask()}}
      Button {text:qsTr("Activity");Layout.fillWidth:true;flat:true;onClicked:{win.page="tasks";if(backend.tasks)backend.tasks.refresh()}}
      Label {text:qsTr("YOUR PROJECTS");color:"#858b99";font.pixelSize:10;font.letterSpacing:1.5}
      ListView {
+      id:projectList;activeFocusOnTab:true;keyNavigationEnabled:true
+      function openCurrent(){if(currentIndex>=0&&currentIndex<backend.categories.length){backend.select(backend.categories[currentIndex].id);win.page="chat"}}
+      Keys.onReturnPressed:openCurrent()
+      Keys.onEnterPressed:openCurrent()
       Layout.fillWidth:true;Layout.fillHeight:true;clip:true;spacing:5;model:backend.categories
       delegate:Rectangle {
        required property var modelData
-       width:ListView.view.width;height:48;radius:theme.radius
+       width:ListView.view.width;height:48;radius:theme.radius;border.width:projectList.activeFocus&&ListView.isCurrentItem?1:0;border.color:theme.accent
        color:backend.currentId===modelData.id?"#252a33":(categoryMouse.containsMouse?"#191d24":"transparent")
        Rectangle {visible:backend.currentId===modelData.id;width:3;height:22;anchors.left:parent.left;anchors.verticalCenter:parent.verticalCenter;color:theme.accent}
        Label {anchors.fill:parent;anchors.leftMargin:modelData.parent>0?25:13;verticalAlignment:Text.AlignVCenter;text:modelData.id===1?qsTr("◎  Home"):"▸  "+modelData.name;elide:Text.ElideRight;color:backend.currentId===modelData.id?"#ffffff":"#b4bac5"}
@@ -85,7 +93,7 @@ ApplicationWindow {
      RowLayout {
       anchors.fill:parent;anchors.margins:22
       ColumnLayout {Layout.fillWidth:true;spacing:5
-       Label {text:win.page==="tasks"?qsTr("Activity"):win.page==="architecture"?qsTr("Files and storage"):win.page==="segments"?qsTr("Saved work"):win.page==="timeline"?qsTr("History"):(win.page==="bindings"?qsTr("Omarchy keybindings"):backend.title);font.pixelSize:22;font.weight:Font.DemiBold}
+       Label {text:win.page==="recordings"?qsTr("Teach a helper"):win.page==="tasks"?qsTr("Activity"):win.page==="architecture"?qsTr("Files and storage"):win.page==="segments"?qsTr("Saved work"):win.page==="timeline"?qsTr("History"):(win.page==="bindings"?qsTr("Omarchy keybindings"):backend.title);font.pixelSize:22;font.weight:Font.DemiBold}
        Label {text:win.page==="tasks"?qsTr("Your tasks, progress, and results"):win.page==="bindings"?qsTr("Search shortcuts from your current desktop configuration"):(backend.folder||qsTr("Persistent conversation · local memory"));color:"#9198a6";font.pixelSize:12;elide:Text.ElideMiddle;Layout.fillWidth:true}
       }
       Button {visible:win.page==="chat";text:qsTr("Project brief");onClicked:win.editCategory(backend.currentId,0)}
@@ -160,6 +168,12 @@ ApplicationWindow {
       }
      }
     }
+    RowLayout {visible:backend.recorder.current.state==="recording";Layout.fillWidth:true;Layout.margins:12
+     Label {text:qsTr("● Recording Hotbox actions");color:"#f1b593";Layout.fillWidth:true}
+     Button {text:qsTr("Pause");onClicked:backend.recorder.togglePause()}
+     Button {text:qsTr("Finish");onClicked:{backend.recorder.stop();win.page="recordings"}}
+    }
+    Recordings {id:recordingsView;visible:win.page==="recordings";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
     Tasks {id:tasksView;visible:win.page==="tasks";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:22}
     Segments {objectName:"segmentsView";visible:win.page==="segments";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
     Architecture {visible:win.page==="architecture";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
@@ -212,5 +226,6 @@ ApplicationWindow {
  Dialog {id:help;anchors.centerIn:parent;width:520;modal:true;title:qsTr("Hotbox controls");standardButtons:Dialog.Close
   Label {width:parent.width;wrapMode:Text.Wrap;text:qsTr("Hold Ctrl + Super for 0.3 seconds to spread the menu at your pointer. Release either key to retract. Click an item to choose; right-click for deeper options. Double-click the center for master chat.\n\nCtrl+K: search keybindings\nCtrl+N: new task\nCtrl+,: model settings\nCtrl+Q: quit Hotbox\n?: this help\n\nThe Preview hotbox button opens a click-controlled preview. Click the background to dismiss it.")}
  }
+ Keypad {id:keypad;owner:win}
  Hotbox {id:overlay;objectName:"hotboxOverlay";owner:win}
 }

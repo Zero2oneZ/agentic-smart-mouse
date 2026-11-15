@@ -3,6 +3,7 @@
 #include "segmentstore.h"
 #include "sessionledger.h"
 #include "taskservice.h"
+#include "demonstrations.h"
 #include <QFutureWatcher>
 #include <QJsonArray>
 #include <QNetworkAccessManager>
@@ -17,6 +18,9 @@
 
 class Backend : public QObject {
     Q_OBJECT
+    Q_PROPERTY(Demonstrations *recorder READ recorder CONSTANT)
+    Q_PROPERTY(QVariantList keypadControls READ keypadControls CONSTANT)
+    Q_PROPERTY(int quickIndex READ quickIndex WRITE setQuickIndex NOTIFY quickChanged)
     Q_PROPERTY(TaskService *tasks READ tasks CONSTANT)
     Q_PROPERTY(QVariantList categories READ categories NOTIFY changed)
     Q_PROPERTY(QVariantMap architecture READ architecture NOTIFY activityChanged)
@@ -40,6 +44,11 @@ class Backend : public QObject {
   public:
     explicit Backend(const QString &directory = {}, QObject *parent = nullptr, bool automaticTasks = true);
     ~Backend() override;
+    Demonstrations *recorder() const { return m_recorder.get(); }
+    QVariantList keypadControls() const;
+    int quickIndex() const;
+    Q_INVOKABLE void setQuickIndex(int index);
+    Q_INVOKABLE void launchQuickTask();
     TaskService *tasks() const { return m_tasks.get(); }
     QVariantList categories() const;
     QVariantMap architecture() const;
@@ -112,6 +121,8 @@ class Backend : public QObject {
     void showMenu();
     void showChat();
     void showBindings();
+    void quickChanged();
+    void showKeypad();
     void showTasks(const QString &view);
     void createRequested(int parent);
 
@@ -126,6 +137,7 @@ class Backend : public QObject {
     void collectTools(const QJsonObject &delta);
     QJsonArray toolDefinitions() const;
     void gitTask(const QString &operation, int category);
+    std::unique_ptr<Demonstrations> m_recorder;
     std::unique_ptr<TaskService> m_tasks;
     std::unique_ptr<SessionLedger> m_ledger;
     std::unique_ptr<ArchitectureStore> m_architecture;

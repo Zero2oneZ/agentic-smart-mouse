@@ -123,14 +123,17 @@ void TaskService::start(const QString &title, const QString &notes, int category
                       {"title", title.trimmed()},
                       {"notes", notes}};
     request("notes_start", {{"request", value}});
+    emit demonstrated("notes_start", tr("Requested: organize pasted notes"));
 }
 void TaskService::select(const QString &id) {
     if (!busy())
         request("notes_read", {{"id", id}});
 }
 void TaskService::control(const QString &action) {
-    if (!busy() && !m_selected.isEmpty() && QStringList{"pause", "resume", "cancel"}.contains(action))
+    if (!busy() && !m_selected.isEmpty() && QStringList{"pause", "resume", "cancel"}.contains(action)) {
         request("notes_control", {{"id", m_selected["id"]}, {"action", action}});
+        emit demonstrated(action, tr("Requested: %1 local task").arg(action));
+    }
 }
 void TaskService::finish(int code) {
     m_timeout.stop();

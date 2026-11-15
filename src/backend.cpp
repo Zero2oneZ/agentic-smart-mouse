@@ -45,7 +45,9 @@ Backend::Backend(const QString &directory, QObject *parent, bool automaticTasks)
         "CREATE TABLE IF NOT EXISTS workspace_git(category INTEGER PRIMARY KEY REFERENCES categories(id), "
         "folder TEXT NOT NULL, branch TEXT NOT NULL, paths TEXT NOT NULL DEFAULT '', remote TEXT NOT NULL "
         "DEFAULT '', automatic INTEGER NOT NULL DEFAULT 0, push INTEGER NOT NULL DEFAULT 0)");
+    m_recorder = std::make_unique<Demonstrations>(m_db, automaticTasks);
     m_tasks = std::make_unique<TaskService>(m_directory, automaticTasks);
+    connect(m_tasks.get(), &TaskService::demonstrated, this, [this](const QString &code, const QString &label){ if(m_recorder)m_recorder->action(code,label); });
     m_ledger = std::make_unique<SessionLedger>(m_db);
     m_architecture = std::make_unique<ArchitectureStore>(m_db, *m_ledger, m_directory);
     m_segments = std::make_unique<SegmentStore>(m_db, *m_ledger);
@@ -154,6 +156,7 @@ Backend::~Backend() {
     m_activityPoll.stop();
     m_gitTask.waitForFinished();
     m_segmentPoll.stop();
+    m_recorder.reset();
     m_tasks.reset();
     m_segments.reset();
     m_architecture.reset();
@@ -537,7 +540,13 @@ void Backend::launch(const QString &action, int id) {
     release();
     if (id < 0)
         id = m_current;
-    if (action == "task" || action == "activity") {
+    if (m_recorder && action != "keypad") {
+        const QMap<QString,QString> labels{{"folder",tr("Open project folder")},{"browser",tr("Open browser")},{"terminal",tr("Open project terminal")},{"chat",tr("Open chat")},{"task",tr("Open a new local task")},{"activity",tr("Open Activity")},{"keybindings",tr("Open shortcuts")}};
+        m_recorder->action(action, labels.value(action,action));
+    }
+    if (action == "keypad") {
+        emit showKeypad();
+    } else if (action == "task" || action == "activity") {
         emit showTasks(action);
     } else if (action == "folder") {
         QString path = field(id, "folder");
@@ -1120,4 +1129,27 @@ QVariantMap Backend::segmentAction(const QString &action, const QVariantMap &a) 
         setStatus(result["error"].toString());
     emit activityChanged();
     return result;
+}
+
+int Backend::quickIndex() const { return qBound(0, setting("quick_task_index", "0").toInt(), 3); }
+void Backend::setQuickIndex(int index) {
+    execute("INSERT INTO settings(name,value) VALUES('quick_task_index',?) ON CONFLICT(name) DO UPDATE SET value=excluded.value", {QString::number((index % 4 + 4) % 4)});
+    emit quickChanged();
+}
+void Backend::launchQuickTask() {
+    const int slot = quickIndex();
+    if (slot == 3) { launch("task"); return; }
+    const QStringList names{tr("Research"),tr("News"),tr("Theme")};
+    const QStringList briefs{
+        tr("Prepare a research plan for this project. Use available sources and cite evidence. Live web collection is not connected; ask for sources when needed. Do not claim to browse or execute tools."),
+        tr("Help prepare a news briefing from sources I provide. Check publication dates and separate facts from uncertainty. Live news collection is not connected; do not invent current headlines."),
+        tr("Help plan a desktop theme. Ask what appearance I want and prepare reviewable recommendations. You cannot apply system changes through these chat tools.")};
+    int child = focusWorkspace(m_current, names[slot], briefs[slot]);
+    if(child > 0) { if(m_recorder)m_recorder->action(QStringList{"research","news","theme"}[slot],tr("Opened %1 guided chat").arg(names[slot]));openChat(child); }
+}
+
+QVariantList Backend::keypadControls() const {
+    QFile file(":/numpad.json");
+    if(!file.open(QIODevice::ReadOnly))return {};
+    return QJsonDocument::fromJson(file.readAll()).object()["controls"].toArray().toVariantList();
 }

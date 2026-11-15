@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
         qputenv("QT_QUICK_BACKEND", "software");
     QGuiApplication app(argc, argv);
     app.setApplicationName("hotbox");
-    app.setApplicationVersion("0.5.0");
+    app.setApplicationVersion("0.6.0");
     app.setDesktopFileName("hotbox");
     app.setQuitOnLastWindowClosed(false);
     app.setWindowIcon(QIcon::fromTheme("hotbox"));

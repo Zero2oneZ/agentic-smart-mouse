@@ -29,6 +29,7 @@ class TaskService : public QObject {
     Q_INVOKABLE void retry();
   signals:
     void changed();
+    void demonstrated(const QString &code, const QString &label);
 
   private:
     void findHelper();

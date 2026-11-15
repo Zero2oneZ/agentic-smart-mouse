@@ -4,6 +4,10 @@
 
 A native Omarchy hotbox for local tasks, persistent project chats and saved work.
 
+Hotbox 0.6 adds **Keyboard controls** and **Teach helper**. Press **Super + numpad +**, then use **4 / 5** to cycle Research, News, Theme and Notes; **Enter** opens the selection. Research, News and Theme open guided chats; Notes runs the local recipe. See [keyboard controls and recordings](docs/NUMPAD_AND_RECORDING.md).
+
+Explicit recordings collect Hotbox actions, notes and supplied URLs into private, reviewable helper drafts. The optional [browser companion](browser-companion/README.md) records selected-tab actions without cookies or typed values. Drafts are not executable agents.
+
 Open Hotbox and choose **Try sample notes** or **New task**. Paste notes, start the
 task, and watch Prepare → Organize → Check → Save. The result is a private Markdown
 brief you can preview or open. No model connection, terminal or VM is required.
@@ -42,11 +46,11 @@ The global shortcut observes Ctrl and Super without consuming them. Left and rig
 
 The development machine uses a user-local install: executable in `~/.local/bin/hotbox`, desktop entry in `~/.local/share/applications/`, and keyboard integration in `~/.local/share/hotbox/hotbox.lua`. Startup is configured in the user's Hyprland autostart; their bindings load the integration file. System package installation was not completed because sudo authentication was required.
 
-`integration/hotbox.lua` contains the Ctrl + Super bindings. The Arch package installs that file at `/usr/share/hotbox/hotbox.lua`. Configuration changes require `hyprctl reload` and `hyprctl configerrors`. Install or change desktop bindings only when explicitly requested.
+`integration/hotbox.lua` contains the Ctrl + Super and Super + numpad + bindings. The Arch package installs that file at `/usr/share/hotbox/hotbox.lua`. Configuration changes require `hyprctl reload` and `hyprctl configerrors`. Install or change desktop bindings only when explicitly requested.
 
 ## Verification
 
-Twenty-three Qt Test checks cover the application. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, context-tool round trips, architecture registration, shared-library reuse, and preservation of user files. Offscreen screenshots use sample content. The live overlay rendered successfully; the previous Tab + Q shortcut failed verification. The replacement Ctrl + Super bindings passed Lua callback checks and loaded in Hyprland without configuration errors; they still require a physical-keyboard check. Keep desktop keyboard injection out of further automated checks.
+Twenty-six Qt Test checks cover the application. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, context-tool round trips, architecture registration, shared-library reuse, and preservation of user files. Offscreen screenshots use sample content. The live overlay rendered successfully; the previous Tab + Q shortcut failed verification. The replacement Ctrl + Super bindings passed Lua callback checks and loaded in Hyprland without configuration errors; they still require a physical-keyboard check. The Super + numpad + binding is loaded without configuration errors. Numpad focus, NumLock aliases, recording recovery and browser import filtering pass offscreen tests; five browser-companion tests and the Lua keypad callback check pass. The companion has not been tested in a live browser. Keep desktop keyboard injection out of further automated checks.
 
 ## Model connection
 

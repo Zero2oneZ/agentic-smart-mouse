@@ -19,3 +19,6 @@ SOURCES += src/architecturestore.cpp
 
 HEADERS += src/taskservice.h
 SOURCES += src/taskservice.cpp
+
+HEADERS += src/demonstrations.h
+SOURCES += src/demonstrations.cpp

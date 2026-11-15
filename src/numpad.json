@@ -1,0 +1,17 @@
+{"version":1,"activation":"SUPER + KP_Add","scope":"focused-hotbox-panel","controls":[
+ {"key":"4","action":"previous_quick","label":"Previous quick task"},
+ {"key":"5","action":"next_quick","label":"Next quick task"},
+ {"key":"enter","action":"open_quick","label":"Open selected quick task"},
+ {"key":"8","action":"previous_job","label":"Select previous job"},
+ {"key":"2","action":"next_job","label":"Select next job"},
+ {"key":"6","action":"activity","label":"Open Activity"},
+ {"key":"+","action":"new_task","label":"New local task"},
+ {"key":"*","action":"toggle_job","label":"Pause or continue selected job"},
+ {"key":"7","action":"toggle_record","label":"Start, pause or continue recording"},
+ {"key":"9","action":"finish_record","label":"Finish recording and review"},
+ {"key":"1","action":"add_note","label":"Add a recording note"},
+ {"key":"3","action":"recordings","label":"Open recordings"},
+ {"key":"0","action":"close","label":"Close keyboard controls"},
+ {"key":"-","action":"close","label":"Close keyboard controls"},
+ {"key":"escape","action":"close","label":"Close keyboard controls"}
+]}
