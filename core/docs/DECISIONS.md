@@ -56,3 +56,14 @@ updates; some also require a stored-data migration.
 
 Resolve these through focused decisions and acceptance tests. Do not encode an
 unsettled production choice as an implicit dependency in fixture code.
+
+
+## Default categories and connectivity
+
+Use a versioned, read-only catalog for high-level category and entity vocabulary.
+Provision lazily through explicit scoped bindings; catalog loading has no filesystem
+or runtime effects. Keep entity IDs distinct from display names, paths, content
+hashes, provider sessions and permission grants. A primary ownership tree is one
+view over typed connectivity, execution and provenance graphs; it cannot replace
+SQL authority or live grant checks. Record short decisions and evidence references
+rather than private model chain-of-thought. See [System model](SYSTEM_MODEL.md).

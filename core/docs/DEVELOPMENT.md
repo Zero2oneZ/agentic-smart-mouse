@@ -6,6 +6,7 @@
 | --- | --- |
 | [Cargo.toml](../Cargo.toml) and [Cargo.lock](../Cargo.lock) | Package, dependency and compiler requirements |
 | [lib.rs](../src/lib.rs) | Public exports and typed errors |
+| [catalog.rs](../src/catalog.rs) | Typed system catalog, structural validation and hashing |
 | [lineage.rs](../src/lineage.rs) | Immutable tool versions, selected development contexts and fork metadata |
 | [model.rs](../src/model.rs) | Templates, graph validation, input/output types and fixture evidence |
 | [permissions.rs](../src/permissions.rs) | Resources, grant lineage and revocation |
@@ -43,7 +44,7 @@ replay, deadline and fixture boundaries.
 
 ## Current test coverage
 
-The existing suite has 24 library integration tests. This table names the tests so
+The existing suite has 29 library integration tests (24 kernel tests and five catalog tests). This table names the tests so
 behavior can be traced directly to executable checks.
 
 | Test | Behavior covered |
@@ -132,3 +133,10 @@ Tool registry tests additionally cover immutable versions and reopened contexts,
 independent fork identity and grants, revoked source access, ownership and metadata
 validation, and preservation of an in-flight workflow through schema-1 migration.
 The CLI fixture exercises all four registry commands across fresh processes.
+
+The catalog suite exercises path traversal and overlapping roots, identity/prefix
+collisions, unknown lifecycle/relation references, terminal-state reopening,
+unreachable states, states with no terminal path, unsupported contracts and digest
+pinning. CLI checks validate a catalog round trip, reject a malicious path and
+confirm no database was created. Runtime graphs and filesystem provisioning are
+outside these tests because the catalog has no such adapters.

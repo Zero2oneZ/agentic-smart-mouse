@@ -120,3 +120,18 @@ identities are separate from permission grants and runtime storage. Forking reco
 provenance and a new development-chat reference; it neither reads a Git repository
 nor copies data or credentials. Version references cannot be rewritten. These are
 trusted-host APIs, not authenticated endpoints or a connected desktop menu.
+
+## Default system catalog
+
+Read [the system model](docs/SYSTEM_MODEL.md) for the expanded folder taxonomy,
+entity identity/connectivity, agent and harness contracts, log envelopes and future
+monitoring/data pipelines. The read-only commands below need no database:
+
+```sh
+cargo run --locked --offline -- catalog
+cargo run --locked --offline -- validate-catalog templates/system-catalog-v1.json
+```
+
+Catalog validation is implemented; folder provisioning, entity graph persistence,
+ID generation and new agent/data services are not. The bundled catalog does not
+modify the existing Qt media-v1 template or any live storage binding.

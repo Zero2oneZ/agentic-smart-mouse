@@ -344,3 +344,27 @@ fork. Reviewed plans and licensing eligibility are not implemented in this slice
 
 Registry mutations emit accepted-operation events with no `run_id`; current event
 pagination is run-scoped, so registry events do not yet have a public query command.
+
+
+## System catalog (no database)
+
+```sh
+hotbox-core catalog
+hotbox-core validate-catalog core/templates/system-catalog-v1.json
+```
+
+`catalog` returns `catalog` (the bundled definition) and `catalog_hash`.
+`validate-catalog FILE` returns `catalog_id` and `catalog_hash`. Both use the normal
+`ok/result` or `ok/error` JSON envelope. File reads have the same 256 KiB limit as
+other CLI inputs. The hash pins the parsed typed representation: whitespace is
+ignored, while array ordering and definition changes affect the digest.
+
+Validation rejects unknown fields/schema/provisioning modes, duplicate IDs/prefixes,
+unsafe or overlapping category roots, invalid lifecycle transitions, unreachable
+or nonterminating lifecycle states, unknown relation endpoint kinds, and ancestry
+relations that permit cycles. It validates **declarations**, not runtime graph
+instances or external filesystem contents. See [System model](SYSTEM_MODEL.md) for
+scope-root resolution, migration boundaries and the proposed entity contracts.
+
+These commands never open SQLite, create category folders, resolve symlinks on disk,
+start agents/monitors, capture terminals or register the catalog in the running app.

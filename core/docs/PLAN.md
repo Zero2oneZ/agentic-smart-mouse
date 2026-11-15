@@ -136,3 +136,18 @@ checks so the platform can be cloned into larger desktop or web builds.
 Acceptance: the core runs without Omarchy or Qt, personal runtime data is excluded
 from distributable code, and a second installation can start from the templates
 without inheriting the original installation's identities, credentials or belongings.
+
+
+## Cross-cutting system catalog
+
+The [system model](SYSTEM_MODEL.md) and bundled catalog specify the expanded
+folder/entity taxonomy, identity mapping, connectivity graphs, agents/harnesses,
+sessions, logs, decisions, monitors and data pipelines. Read-only catalog validation
+is implemented. It does not enable any new runtime adapter or permission action.
+
+Before connecting these categories to agents or collectors, implement the model's
+entity/edge SQL registry with scoped traversal and legacy-ID mappings. Follow with
+reviewed plans, operation/session/event contracts and a deterministic local-file
+ingestion fixture. Authentication and network policy must precede live monitors;
+verified isolated execution must precede real release activation. Preserve the
+mandatory workflow stages and the existing Qt media layout during these additions.

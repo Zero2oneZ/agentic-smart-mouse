@@ -23,6 +23,8 @@ flowchart LR
 
 | Module | Responsibility | Does not do |
 | --- | --- | --- |
+| `catalog.rs` | Read-only default catalog, structural validation and digest pinning | Provision storage or persist a live entity graph |
+| `lineage.rs` | Immutable tool versions, development context and fork metadata | Copy Git repositories or create chats |
 | `model.rs` | Typed contracts, template validation, hashing, fixture evidence and public views | Read project files or execute build commands |
 | `permissions.rs` | Resource ownership, grant issuance, lineage checks and revocation | Authenticate people, devices or network callers |
 | `engine.rs` | SQL persistence, scheduling, leases, budgets, completion and events | Run containers, create Git branches or activate software |
@@ -61,7 +63,8 @@ the latter, without conflating their IDs, leases or state machines.
 2. **Permission lineage:** determines which grants derive authority from which
    parent. Implemented locally; bounded to 32 grants per chain.
 3. **Tool/version lineage:** determines which tool version was edited or forked
-   from another. Target only; Git refs alone do not implement this registry.
+   from another. Implemented as metadata in the Rust registry; Git refs alone do
+   not supply tool identity.
 
 GraphQL, when added, will expose queries over state. It will not itself execute
 the DAG or establish permission lineage.
@@ -129,3 +132,14 @@ SQL does not render HTML itself. The Rust core must remain independent of those
 frontends and providers.
 
 See [the implementation plan](PLAN.md) for dependencies and acceptance criteria.
+
+
+## Expanded default organization
+
+The [system model](SYSTEM_MODEL.md) extends these foundations with 25 default
+folder categories, 50 entity kinds, typed connectivity and lifecycle contracts.
+The bundled catalog and its validator are implemented; the generalized SQL entity
+and edge registry remains a target. The model separates containment, execution,
+provenance, permission and network relationships and specifies scoped logs and
+future web monitoring, ingestion and data engineering adapters. Read-only catalog
+commands never alter live folders, bindings, policies or the Qt application.

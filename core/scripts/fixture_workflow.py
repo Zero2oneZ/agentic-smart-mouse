@@ -24,6 +24,21 @@ with tempfile.TemporaryDirectory(prefix="hotbox-core-cli-") as temporary:
         assert (process.returncode == 0) is succeeds, process.stderr
         return response.get("result", response)
 
+    listed = subprocess.run([binary, "catalog"], text=True, capture_output=True, timeout=15, check=True)
+    listing = json.loads(listed.stdout)["result"]
+    catalog_file = Path(temporary) / "catalog.json"
+    catalog_file.write_text(json.dumps(listing["catalog"]))
+    checked = subprocess.run([binary, "validate-catalog", str(catalog_file)], text=True,
+                             capture_output=True, timeout=15, check=True)
+    assert json.loads(checked.stdout)["result"]["catalog_hash"] == listing["catalog_hash"]
+    invalid = listing["catalog"]
+    invalid["categories"][0]["belongings_path"] = "../../escape"
+    catalog_file.write_text(json.dumps(invalid))
+    rejected = subprocess.run([binary, "validate-catalog", str(catalog_file)], text=True,
+                              capture_output=True, timeout=15, check=False)
+    assert rejected.returncode != 0 and json.loads(rejected.stdout)["ok"] is False
+    assert not Path(database).exists(), "Catalog commands must not create a database"
+
     validated = subprocess.run([binary, "validate", template_path], text=True, capture_output=True, check=True)
     assert json.loads(validated.stdout)["ok"]
     call("resource", actor="alice", resource="project")
@@ -87,4 +102,4 @@ with tempfile.TemporaryDirectory(prefix="hotbox-core-cli-") as temporary:
     assert fork["forked_from"] == {"tool_id": "player", "version": "1.0.0"}
     call("tool_context", actor="alice", grant_id="alice-root", tool_id="player-fork", version="1.0.0", succeeds=False)
 
-print("CLI fixture passed: segmented build, restart/resume, immutable template, audit events, delegated revocation, independent access, immutable tool versions and fork lineage.")
+print("CLI fixture passed: segmented build, restart/resume, immutable template, audit events, delegated revocation, independent access, immutable tool versions, fork lineage and catalog validation.")

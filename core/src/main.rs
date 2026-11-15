@@ -87,6 +87,15 @@ fn bounded_read(reader: impl Read) -> Result<Vec<u8>> {
 }
 fn execute() -> Result<Value> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.as_slice() == ["catalog"] {
+        let catalog = hotbox_core::SystemCatalog::bundled()?;
+        return Ok(json!({"catalog_hash":catalog.hash()?, "catalog":catalog}));
+    }
+    if args.len() == 2 && args[0] == "validate-catalog" {
+        let catalog: hotbox_core::SystemCatalog =
+            serde_json::from_slice(&bounded_read(std::fs::File::open(&args[1])?)?)?;
+        return Ok(json!({"catalog_id":catalog.id,"catalog_hash":catalog.hash()?}));
+    }
     if args.len() == 2 && args[0] == "validate" {
         let template: Template =
             serde_json::from_slice(&bounded_read(std::fs::File::open(&args[1])?)?)?;
@@ -96,7 +105,7 @@ fn execute() -> Result<Value> {
     }
     if args.len() != 1 {
         return Err(hotbox_core::Error::Invalid(
-            "usage: hotbox-core DATABASE < request.json | hotbox-core validate TEMPLATE.json"
+            "usage: hotbox-core DATABASE < request.json | hotbox-core validate TEMPLATE.json | hotbox-core catalog | hotbox-core validate-catalog CATALOG.json"
                 .into(),
         ));
     }

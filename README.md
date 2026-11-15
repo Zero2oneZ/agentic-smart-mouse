@@ -202,7 +202,31 @@ runtime bindings and the original tool unchanged. This is a local registry, not 
 Git copy operation or a connected Edit/Fork UI. Reviewed plans and contribution
 agreements remain future work. See [core CLI](core/docs/CLI.md#tool-lineage-registry).
 
-The core check suite covers 24 integration tests plus the multi-process CLI fixture.
+The core check suite covers 29 integration tests plus the multi-process CLI fixture.
 It runs independently of the installed Qt application. Kernel schema 1 upgrades
 transactionally to schema 2; back up the separate kernel database before opening it
 with this version. The Qt chat database is never migrated by the core.
+
+
+## Expanded system catalog and future agents/data platform
+
+The [system model](core/docs/SYSTEM_MODEL.md) defines 25 default categories for
+projects, tools, agents, harnesses, workflows, tasks, sessions, code, environments,
+networking, web monitoring, connectors, ingestion, data engineering, datasets,
+schemas, knowledge, documents, media, experiments, schedules, releases,
+observability, governance and backups. Definitions stay with source; captured
+content and operational state stay in explicitly scoped belongings storage.
+
+The versioned [catalog](core/templates/system-catalog-v1.json) declares 50 entity
+kinds with unique ID prefixes, 19 relation kinds and seven lifecycle contracts.
+`hotbox-core catalog` prints the validated catalog and its digest;
+`hotbox-core validate-catalog FILE` validates a proposed catalog without opening a
+database. Checks cover path traversal/overlap, duplicate identities, unknown types,
+invalid transitions and lifecycle dead ends. These commands do not provision
+folders, migrate the Qt registry, capture terminal sessions or enable monitoring.
+
+The system model also specifies agent/harness naming, tasks/operations/attempts,
+code/network/terminal logs, concise decision records, source-to-dataset provenance,
+and distinct branch/fork/clone/instance behavior. Entity graph storage, generated
+IDs, agent execution, collectors and live data pipelines are planned adapters, not
+implemented services. Existing media paths and runtime bindings are unchanged.
