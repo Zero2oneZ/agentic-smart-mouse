@@ -26,6 +26,145 @@
 class HotboxTests : public QObject {
     Q_OBJECT
   private slots:
+    void rollingLedgerMigratesVersionOneAndProtectsContracts() {
+        QTemporaryDir dir;
+        QString road;
+        {
+            Backend b(dir.path(), nullptr, false);
+            road = b.buildAction("create", {{"schema_version", 1},
+                                            {"request_id", "before-migration"},
+                                            {"title", "Preserve existing work"}})["roadmap"]
+                       .toString();
+        }
+        auto connection = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", connection);
+            db.setDatabaseName(dir.filePath("hotbox.sqlite3"));
+            QVERIFY(db.open());
+            QSqlQuery q(db);
+            QVERIFY(q.exec("DROP TABLE build_contracts"));
+            QVERIFY(q.exec("DELETE FROM build_schema WHERE version=2"));
+            db.close();
+        }
+        QSqlDatabase::removeDatabase(connection);
+        {
+            Backend b(dir.path(), nullptr, false);
+            auto saved = b.buildAction("read", {{"schema_version", 1}, {"roadmap", road}});
+            QCOMPARE(saved["title"].toString(), QString("Preserve existing work"));
+            auto step = b.buildAction("node.add", {{"schema_version", 1},
+                                                   {"request_id", "after-migration"},
+                                                   {"roadmap", road},
+                                                   {"expected_revision", 1},
+                                                   {"kind", "step"},
+                                                   {"title", "Contract"}});
+            QVERIFY(step["ok"].toBool());
+            QVERIFY(b.buildAction("contract.save", {{"schema_version", 1},
+                                                    {"request_id", "contract-after-migration"},
+                                                    {"roadmap", road},
+                                                    {"expected_revision", 2},
+                                                    {"node", step["node"]},
+                                                    {"acceptance", "Works"},
+                                                    {"implementation", "src/buildledger.cpp"},
+                                                    {"verification", "Temporary migration test"}})["ok"]
+                        .toBool());
+        }
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", connection);
+            db.setDatabaseName(dir.filePath("hotbox.sqlite3"));
+            QVERIFY(db.open());
+            QSqlQuery q(db);
+            QVERIFY(!q.exec("UPDATE build_contracts SET acceptance='tampered'"));
+            QVERIFY(!q.exec("DELETE FROM build_contracts"));
+            QVERIFY(q.exec("SELECT MAX(version) FROM build_schema"));
+            QVERIFY(q.next());
+            QCOMPARE(q.value(0).toInt(), 2);
+            db.close();
+        }
+        QSqlDatabase::removeDatabase(connection);
+    }
+    void rollingLedgerContractsGuideAndForkEvidence() {
+        QTemporaryDir dir;
+        Backend b(dir.path(), nullptr, false);
+        auto road = b.buildAction(
+            "create",
+            {{"schema_version", 1}, {"request_id", "rolling"}, {"title", "Rolling work"}})["roadmap"];
+        auto read = [&] { return b.buildAction("read", {{"schema_version", 1}, {"roadmap", road}}); };
+        int serial = 0;
+        auto change = [&](const QString &op, QVariantMap args) {
+            args["schema_version"] = 1;
+            args["request_id"] = QString("rolling-%1").arg(++serial);
+            args["roadmap"] = road;
+            args["expected_revision"] = read()["revision"];
+            return b.buildAction(op, args);
+        };
+        auto step = change("node.add", {{"kind", "step"}, {"title", "Implement contract"}})["node"];
+        auto guide = [&] {
+            return b.buildAction("guide", {{"schema_version", 1}, {"roadmap", road}, {"node", step}});
+        };
+        QCOMPARE(guide()["items"].toList().first().toMap()["guidance"].toString(),
+                 QString("define_contract"));
+        auto fields = QVariantMap{{"node", step},
+                                  {"acceptance", "Output survives restart"},
+                                  {"implementation", "src/buildledger.cpp: BuildLedger::call"},
+                                  {"verification", "Run temporary database persistence tests"}};
+        auto first = change("contract.save", fields);
+        QVERIFY(first["ok"].toBool());
+        QCOMPARE(guide()["items"].toList().first().toMap()["guidance"].toString(), QString("implement"));
+        QVERIFY(!change("contract.save", fields)["ok"].toBool());
+        auto snapshot = change("checkpoint", {});
+        QVERIFY(snapshot["ok"].toBool());
+        fields["parent_contract"] = first["contract"];
+        fields["acceptance"] = "Updated acceptance";
+        auto second = change("contract.save", fields);
+        QVERIFY(second["ok"].toBool());
+        QCOMPARE(read()["contracts"].toList().size(), 2);
+        auto references=b.contextTool("read_build_roadmap",{{"roadmap",road}})["contracts"].toList();QVERIFY(!references.first().toMap().contains("acceptance"));
+        auto full=b.contextTool("read_build_contract",{{"roadmap",road},{"contract",second["contract"]}});QCOMPARE(full["contract"].toMap()["acceptance"].toString(),QString("Updated acceptance"));
+        QCOMPARE(guide()["items"].toList().first().toMap()["contract"].toMap()["id"], second["contract"]);
+        auto event = b.recordEvent(
+            1, "command.finished", "Check passed",
+            QString::fromUtf8(
+                QJsonDocument(QJsonObject{{"exitCode", 0}, {"output", QString(9000, 'x')}}).toJson()));
+        QVERIFY(change("link",
+                       {{"node", step}, {"kind", "terminal_command"}, {"ref", QString::number(event)}})["ok"]
+                    .toBool());
+        QVERIFY(change("node.update", {{"node", step}, {"state", "recorded"}})["ok"].toBool());
+        auto current = guide();
+        auto item = current["items"].toList().first().toMap();
+        QCOMPARE(item["guidance"].toString(), QString("review_evidence"));
+        QCOMPARE(item["verification"].toString(), QString("unverified"));
+        QCOMPARE(item["checks"].toList().first().toMap()["outcome"].toString(), QString("command_passed"));
+        QCOMPARE(guide()["digest"], current["digest"]);
+        auto fork = change("fork", {{"title", "Branch recorded work"}, {"node", step}});
+        QVERIFY(fork["ok"].toBool());
+        auto branch = b.buildAction("guide", {{"schema_version", 1}, {"roadmap", fork["roadmap"]}});
+        auto inherited = branch["items"].toList().first().toMap();
+        QVERIFY(inherited["checks"].toList().first().toMap()["inherited"].toBool());
+        QCOMPARE(inherited["verification"].toString(), QString("unverified"));
+        auto old =
+            change("fork", {{"title", "Before contract change"}, {"checkpoint", snapshot["checkpoint"]}});
+        auto historical = b.buildAction("read", {{"schema_version", 1}, {"roadmap", old["roadmap"]}});
+        QCOMPARE(historical["contracts"].toList().first().toMap()["parent_contract"], first["contract"]);
+        QCOMPARE(historical["contracts"].toList().first().toMap()["acceptance"].toString(),
+                 QString("Output survives restart"));
+        auto idea = change("node.add", {{"kind", "idea"}, {"title", "Future possibility"}});
+        QVERIFY(idea["ok"].toBool());
+        auto proposal =
+            b.buildAction("guide", {{"schema_version", 1}, {"roadmap", road}, {"node", idea["node"]}});
+        QCOMPARE(proposal["items"].toList().first().toMap()["guidance"].toString(),
+                 QString("review_proposal"));
+        for (int i = 0; i < 16; ++i)
+            QVERIFY(change("node.add", {{"kind", "addition"}, {"title", "Additional work"}})["ok"].toBool());
+        auto bounded = b.buildAction("guide", {{"schema_version", 1}, {"roadmap", road}});
+        QVERIFY(bounded["items"].toList().size() <= 12);
+        QVERIFY(bounded["omitted"].toInt() > 0);
+        QVERIFY(QJsonDocument::fromVariant(bounded).toJson(QJsonDocument::Compact).size() < 20000);
+        QVERIFY(b.optimizerReport()["rollingLedger"].toMap()["visibleCount"].toInt() >= 3);
+        auto other = b.addCategory("Other", "", "", 0);
+        b.select(other);
+        QVERIFY(!guide()["ok"].toBool());
+        QVERIFY(!b.contextTool("read_build_guidance",{{"roadmap",road}})["ok"].toBool());
+    }
     void buildLedgerProtectsImmutableEvidenceAndObjects() {
         QTemporaryDir dir;Backend b(dir.path(),nullptr,false);
         auto road=b.buildAction("create",{{"schema_version",1},{"request_id","make"},{"title","Private docs"}});QVERIFY(road["ok"].toBool());
@@ -49,7 +188,11 @@ class HotboxTests : public QObject {
         auto target=QVariantMap{{"name","Build"},{"id",1},{"build",road["roadmap"]},{"step",step["node"]}};
         auto id=b.agents()->start("Bound test",target,"codex");QVERIFY(!id.isEmpty());QTRY_COMPARE_WITH_TIMEOUT(b.agents()->selected()["state"].toString(),QString("finished"),5000);
         auto saved=b.buildAction("read",{{"schema_version",1},{"roadmap",road["roadmap"]}});QCOMPARE(saved["links"].toList().size(),1);QCOMPARE(saved["links"].toList().first().toMap()["ref"].toString(),id);
-        target["step"]="missing";QVERIFY(b.agents()->start("Must not launch",target,"codex").isEmpty());auto failed=b.agents()->jobs().first().toMap();QVERIFY(!QFileInfo(dir.filePath("data/agent-runs/")+failed["id"].toString()+"/received.txt").exists());
+        auto count=b.agents()->jobs().size();target["step"]="missing";QVERIFY(b.agents()->start("Must not launch",target,"codex").isEmpty());QCOMPARE(b.agents()->jobs().size(),count);
+        auto context=b.agents()->selected()["target"].toMap()["buildContext"].toMap();QCOMPARE(context["revision"].toInt(),2);QVERIFY(!context["digest"].toString().isEmpty());
+        QFile received(dir.filePath("data/agent-runs/")+id+"/received.txt");QVERIFY(received.open(QIODevice::ReadOnly));QVERIFY(received.readAll().contains("buildContext"));
+        b.agents()->setBuildContext([&](const QString &r,const QString &n,int){auto snapshot=b.buildAction("guide",{{"schema_version",1},{"roadmap",r},{"node",n}});b.buildAction("node.add",{{"schema_version",1},{"request_id","race"},{"roadmap",r},{"expected_revision",snapshot["revision"]},{"kind","issue"},{"title","Concurrent change"}});return snapshot;});
+        target["step"]=step["node"];QVERIFY(b.agents()->start("Stale guidance must not launch",target,"codex").isEmpty());auto failed=b.agents()->jobs().first().toMap();QVERIFY(!QFileInfo(dir.filePath("data/agent-runs/")+failed["id"].toString()+"/received.txt").exists());
     }
     void buildLedgerVersionsForksAndScopes() {
         QTemporaryDir dir;QString road,node,version,checkpoint;

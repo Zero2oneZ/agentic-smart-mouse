@@ -9,6 +9,12 @@ context. The current Rust engine still runs deterministic fixtures only; it has
 no general agent/scheduling/executor adapter. The example JSON is a proposed
 transport shape, not a core-validated or authorized command.
 
+The implemented [rolling build ledger](BUILD_LEDGER_API.md#rolling-work-and-orchestration-guidance)
+now supplies scoped, revision-pinned reference context to supervised CLI workers,
+with contract versions and unverified command evidence. Master-loop inspection
+links to that ledger. This implements context preparation, not the full planner,
+general leased dispatch or independent functionality acceptance described below.
+
 ## Responsibility
 
 Every Hotbox process workflow needs a loop planner that translates the user's

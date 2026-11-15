@@ -62,7 +62,9 @@ QVariantMap Backend::optimizerReport(int scope) const {
         suggest("evaluate_context_selection",
                 tr("Compare scoped summary/reference selection against a fixed task set; preserve raw "
                    "evidence and verification quality."));
-    return {{"policy", policy.toVariantMap()},
+    auto roads=m_build->call(1,"list",{{"schema_version",1}}).value("roadmaps").toList();
+    return {{"rollingLedger", QVariantMap{{"mode","reference_only"},{"roadmaps",roads.mid(0,12)},{"visibleCount",roads.size()},{"nextRead","read_build_guidance"},{"dispatchAuthority","existing_rust_controller"}}},
+            {"policy", policy.toVariantMap()},
             {"mode", "advisory_only"},
             {"coverage", "latest_1000_agent_runs"},
             {"runs", runs},

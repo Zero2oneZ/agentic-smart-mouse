@@ -10,8 +10,10 @@ ColumnLayout {
  property string step:""
  property string problem:""
  property var document:({})
+ property var contract:({})
+ property var guidance:({})
  property bool documentLatest:{if(!document.version)return true;for(var item of road.documents||[])if(item.document===document.document&&item.number>document.number)return false;return true}
- function call(operation,args){var request=Object.assign({schema_version:1},args||{});if(!["list","read","history","document.read","checkpoint.read"].includes(operation)){request.request_id=Date.now()+"-"+Math.random();if(road.id&&operation!=="create")request.expected_revision=road.revision}var result=backend.buildAction(operation,request);problem=result.error||"";return result}
+ function call(operation,args){var request=Object.assign({schema_version:1},args||{});if(!["contract.read","guide","schema","list","read","history","document.read","checkpoint.read"].includes(operation)){request.request_id=Date.now()+"-"+Math.random();if(road.id&&operation!=="create")request.expected_revision=road.revision}var result=backend.buildAction(operation,request);problem=result.error||"";return result}
  function refresh(){roads=call("list",{}).roadmaps||[];if(road.id){var current=call("read",{roadmap:road.id});if(current.ok)road=current}}
  function choose(id){road=call("read",{roadmap:id});step="";document={}}
  function mutate(operation,args){var result=call(operation,Object.assign({roadmap:road.id},args||{}));if(result.ok){if(operation==="fork")choose(result.roadmap);refresh()}return result}
@@ -35,6 +37,8 @@ ColumnLayout {
    Label {text:root.road.id?qsTr("Revision %1 · Master chat linked · %2 evidence links").arg(root.road.revision).arg((root.road.links||[]).length):"";Layout.fillWidth:true;color:theme.accent}
    RowLayout {
     Button {text:qsTr("Add item");enabled:!!root.road.id;onClicked:nodeDialog.open()}
+    Button {text:qsTr("Contract");enabled:!!root.step;onClicked:{root.contract={};for(var item of root.road.contracts||[])if(item.node===root.step){root.contract=item;break}acceptance.text=root.contract.acceptance||"";implementation.text=root.contract.implementation||"";verification.text=root.contract.verification||"";contractDialog.open()}}
+    Button {text:qsTr("Guide");enabled:!!root.road.id;onClicked:{root.guidance=root.call("guide",{roadmap:root.road.id,node:root.step});guideDialog.open()}}
     Button {text:qsTr("Checkpoint");enabled:!!root.road.id;onClicked:root.mutate("checkpoint",{})}
     Button {text:qsTr("Fork");enabled:!!root.road.id;onClicked:{forkTitle.text=root.road.title+qsTr(" branch");forkDialog.open()}}
    }
@@ -63,7 +67,7 @@ ColumnLayout {
  Dialog {id:nodeDialog;title:qsTr("Add roadmap item");modal:true;anchors.centerIn:parent;width:420;standardButtons:Dialog.Save|Dialog.Cancel
   onAccepted:{var result=root.mutate("node.add",{parent:root.step,kind:nodeKind.currentText,title:nodeTitle.text,body:nodeBody.text});if(result.ok){root.step=result.node;nodeTitle.clear();nodeBody.clear()}}
   ColumnLayout {anchors.fill:parent
-   ComboBox {id:nodeKind;model:["milestone","checkpoint","step","substep","issue","test","debug","documentation"];Layout.fillWidth:true}
+   ComboBox {id:nodeKind;model:["milestone","checkpoint","step","substep","issue","test","debug","documentation","idea","addition","decision","contract"];Layout.fillWidth:true}
    TextField {id:nodeTitle;placeholderText:qsTr("Title");maximumLength:160;Layout.fillWidth:true}
    TextArea {id:nodeBody;placeholderText:qsTr("Goal, acceptance checks or issue details");Layout.fillWidth:true;Layout.preferredHeight:100;wrapMode:TextEdit.Wrap}
    Label {text:root.step?qsTr("Added under the selected item"):qsTr("Added at roadmap root");color:"#aeb9c9"}
@@ -85,6 +89,25 @@ ColumnLayout {
    Label {visible:!!root.document.version&&!root.documentLatest;text:qsTr("Historical versions are read-only. Fork from a checkpoint to branch their history.");wrapMode:Text.Wrap;Layout.fillWidth:true}
    Button {text:root.document.version?qsTr("Save new version"):qsTr("Save new document");enabled:root.documentLatest;onClicked:{var args={node:root.step,title:docTitle.text,content:docBody.text};if(root.document.version){args.document=root.document.document;args.parent_version=root.document.version}var result=root.mutate("document.save",args);if(result.ok)documentDialog.close()}}
    Button {text:qsTr("Close");onClicked:documentDialog.close()}
+  }
+ }
+ Dialog {id:contractDialog;title:qsTr("Versioned step contract");modal:true;anchors.centerIn:parent;width:Math.min(640,root.width);height:520
+  contentItem:ColumnLayout {
+   Label {text:qsTr("Define what works, where it lives and how to check it. Saving preserves the previous version.");wrapMode:Text.Wrap;Layout.fillWidth:true}
+   ScrollView {Layout.fillWidth:true;Layout.fillHeight:true;TextArea {id:acceptance;placeholderText:qsTr("Acceptance criteria");wrapMode:TextEdit.Wrap;textFormat:TextEdit.PlainText}}
+   ScrollView {Layout.fillWidth:true;Layout.fillHeight:true;TextArea {id:implementation;placeholderText:qsTr("Implementation file and symbol references");wrapMode:TextEdit.Wrap;textFormat:TextEdit.PlainText}}
+   ScrollView {Layout.fillWidth:true;Layout.fillHeight:true;TextArea {id:verification;placeholderText:qsTr("Verification instructions and expected results");wrapMode:TextEdit.Wrap;textFormat:TextEdit.PlainText}}
+   Button {text:qsTr("Save contract version");onClicked:{var result=root.mutate("contract.save",{node:root.step,parent_contract:root.contract.id||"",acceptance:acceptance.text,implementation:implementation.text,verification:verification.text});if(result.ok)contractDialog.close()}}
+   Button {text:qsTr("Cancel");onClicked:contractDialog.close()}
+  }
+ }
+ Dialog {id:guideDialog;title:qsTr("Rolling ledger guidance");modal:true;anchors.centerIn:parent;width:Math.min(650,root.width);height:500
+  contentItem:ColumnLayout {
+   Label {text:qsTr("Revision %1 · reference context · functionality remains unverified").arg(root.guidance.revision||0);wrapMode:Text.Wrap;Layout.fillWidth:true}
+   ScrollView {Layout.fillWidth:true;Layout.fillHeight:true
+    TextArea {readOnly:true;selectByMouse:true;textFormat:TextEdit.PlainText;wrapMode:TextEdit.Wrap;text:{var rows=[];for(var item of root.guidance.items||[])rows.push(item.title+" · "+item.state+"\n"+item.guidance+"\n"+(item.contract?item.contract.acceptance:qsTr("No acceptance contract"))+"\n"+(item.checks||[]).map(function(c){return c.outcome+(c.inherited?" (inherited)":"")}).join(", "));return rows.join("\n\n")}}
+   }
+   Button {text:qsTr("Close");onClicked:guideDialog.close()}
   }
  }
  Dialog {id:runDialog;title:qsTr("Prompt selected build step");modal:true;anchors.centerIn:parent;width:450

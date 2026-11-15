@@ -57,10 +57,11 @@ Backend::Backend(const QString &directory, QObject *parent, bool automaticTasks)
     connect(m_tasks.get(), &TaskService::demonstrated, this, [this](const QString &code, const QString &label){ if(m_recorder)m_recorder->action(code,label); });
     m_ledger = std::make_unique<SessionLedger>(m_db);
     m_build = std::make_unique<BuildLedger>(m_db,*m_ledger,m_directory);
-    m_agents->setBuildBinder([this](const QString &road,const QString &node,const QString &run,int category){
+    m_agents->setBuildContext([this](const QString &road,const QString &node,int scope){return m_build->call(scope,"guide",{{"schema_version",1},{"roadmap",road},{"node",node}});});
+    m_agents->setBuildBinder([this](const QString &road,const QString &node,const QString &run,int category,qint64 revision){
         auto existing=m_build->call(category,"read",{{"schema_version",1},{"roadmap",road}});
         if(!existing["ok"].toBool()||existing["workspace"].toInt()!=category)return false;
-        return m_build->call(category,"link",{{"schema_version",1},{"request_id","agent:"+run},{"roadmap",road},{"node",node},{"expected_revision",existing["revision"]},{"kind","agent_run"},{"ref",run}})["ok"].toBool();
+        return m_build->call(category,"link",{{"schema_version",1},{"request_id","agent:"+run},{"roadmap",road},{"node",node},{"expected_revision",revision},{"kind","agent_run"},{"ref",run}})["ok"].toBool();
     });
     connect(m_agents.get(),&AgentService::capturedEvent,this,[this](int category,const QString &kind,const QString &summary,const QString &content,const QString &source){recordEvent(category>0?category:1,kind,summary,content,source);});
     connect(m_tasks.get(),&TaskService::demonstrated,this,[this](const QString &,const QString &label){recordEvent(m_current,"task.requested",label,label,"local task");});
@@ -883,6 +884,8 @@ QJsonArray Backend::toolDefinitions() const {
     };
     QJsonObject integer{{"type", "integer"}}, text{{"type", "string"}};
     return {
+        make("read_build_contract","Read a scoped immutable acceptance contract version. Read-only reference data.",{{"roadmap",text},{"contract",text}},{"roadmap","contract"}),
+        make("read_build_guidance","Read bounded rolling-ledger reference context: proposals, contracts, blockers and unverified check evidence. Does not grant dispatch or acceptance.",{{"roadmap",text},{"node",text}},{"roadmap"}),
         make("read_build_roadmap","Read scoped build roadmap metadata and evidence references. Read-only; no execution transitions.",{{"roadmap",text}},{"roadmap"}),
         make("read_build_document","Read one page of a scoped immutable build document version.",{{"roadmap",text},{"version",text},{"offset",integer}},{"roadmap","version","offset"}),
         make("inspect_master_loop","Read aggregate master-loop evidence and optimization proposals. Master scope only. No source changes or execution.",{},{}),
@@ -926,9 +929,15 @@ QJsonArray Backend::toolDefinitions() const {
 QVariantMap Backend::contextTool(const QString &name, const QVariantMap &a, int scope) {
     if (scope == 0)
         scope = m_current;
+    if(name=="read_build_contract")return m_build->call(scope,"contract.read",{{"schema_version",1},{"roadmap",a.value("roadmap")},{"contract",a.value("contract")}});
+    if(name=="read_build_guidance")return m_build->call(scope,"guide",{{"schema_version",1},{"roadmap",a.value("roadmap")},{"node",a.value("node",QString(""))}});
     if(name=="read_build_roadmap"){
         auto result=m_build->call(scope,"read",{{"schema_version",1},{"roadmap",a.value("roadmap")}});
-        for(const auto &key:{"nodes","documents","links","checkpoints","changes"}){auto rows=result.value(key).toList();result[QString(key)+"Count"]=rows.size();result[key]=rows.mid(0,12);}
+        for(const auto &key:{"nodes","documents","contracts","links","checkpoints","changes"}) {
+            auto rows=result.value(key).toList();result[QString(key)+"Count"]=rows.size();rows=rows.mid(0,12);
+            if(QString(key)=="contracts")for(auto &row:rows){auto full=row.toMap();QVariantMap ref;for(const auto &field:{"id","node","parent_contract","digest","created"})ref[field]=full[field];row=ref;}
+            result[key]=rows;
+        }
         return result;
     }
     if(name=="read_build_document")return m_build->call(scope,"document.read",{{"schema_version",1},{"roadmap",a.value("roadmap")},{"version",a.value("version")},{"offset",a.value("offset",0)}});
@@ -1197,6 +1206,6 @@ void Backend::openAgent(const QString &id,const QString &view) {
 
 QVariantMap Backend::buildAction(const QString &operation,const QVariantMap &arguments) {
     auto result=m_build->call(m_current,operation,arguments);
-    if(result.value("ok").toBool()&&!QStringList{"schema","list","read","history","document.read","checkpoint.read"}.contains(operation)){emit activityChanged();emit changed();}
+    if(result.value("ok").toBool()&&!QStringList{"contract.read","guide","schema","list","read","history","document.read","checkpoint.read"}.contains(operation)){emit activityChanged();emit changed();}
     return result;
 }

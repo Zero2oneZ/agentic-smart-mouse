@@ -145,3 +145,78 @@ Connect normalized provider receipts, then the existing Rust leased runner and
 independent verifier as described in [BUILD_ROADMAP.md](BUILD_ROADMAP.md). Preserve
 this ledger as the user-facing plan/evidence index rather than adding a second
 scheduler or treating a saved checkpoint as execution acceptance.
+
+## Rolling work and orchestration guidance
+
+Ideas, additions, decisions and contracts are node kinds alongside execution work.
+`proposed` is also a planning state. Preserve original proposals as history; archive
+abandoned work, fork alternatives, and append new versions rather than rewriting
+past evidence. `recorded` means an implementation/outcome was recorded; completion
+still requires independent acceptance from the existing execution controller.
+
+Every actionable step can have an immutable, versioned contract:
+
+```text
+Idea / addition / decision
+          |
+Acceptance criteria + implementation references + verification instructions
+          |
+Pinned roadmap revision + contract version/digest
+          |
+Worker attempt / command -> observed evidence -> review
+          |
+Independent verifier acceptance (general runner integration remains planned)
+```
+
+`contract.save` takes common mutation fields plus `node`, `acceptance`,
+`implementation` and `verification` (required nonempty text, up to 4,000 characters
+each). Updating requires the latest `parent_contract`; first versions omit it or
+use an empty string. The response includes `contract` and `digest`. Use
+`contract.read` with `roadmap` and `contract` to retrieve a full immutable version.
+`read` includes contract versions, newest first, capped at 1,000 per roadmap.
+Contract changes have the same atomic revision/event/idempotency semantics as
+other mutations. They are source references and instructions to review, never
+shell commands executed by saving them. Schema migration 2 adds the private
+`build_contracts` table and immutability triggers without changing API version 1.
+Older application versions reject this newer storage schema.
+
+Forks retain the latest contract at the selected snapshot and give it a new local
+ID with a parent pointing to the original version. Subtree forks carry only
+contracts attached to the selected nodes. A new branch's inherited command
+results cannot establish that its functionality works.
+
+`guide` reads `roadmap` and optional `node`. It returns a deterministic digest,
+roadmap revision, branch/source lineage and up to 12 reference items. A focused
+read includes the selected item first, then its ancestry. An overview excludes
+archived items. Item payloads are capped at 10,000 serialized characters in total;
+body/contract excerpts are clipped and full versions remain retrievable by ID.
+`omitted` reports items beyond the count/size bounds. This is a character/context
+bound, not a token-usage measurement. Selection follows stored order and is not a
+dependency solver, readiness decision or approved dispatch plan.
+
+Guidance labels are `review_proposal`, `define_contract`, `review_blocker`,
+`implement`, `review_evidence` and `archived`. They are reference hints, not
+scheduler commands. Each item includes at most three command result references:
+`command_passed`, `command_failed` or `unknown`, inherited status, observed Git
+HEAD when available, and `contract_match` (`same_version`, `changed`, `unknown`).
+Every result remains `unverified`: a matching contract and zero exit do not prove
+artifact identity, independent checking or acceptance. Older/malformed receipts
+remain unknown. No output/log bodies are exported in the guide.
+
+Bound `hotbox run` commands pin the starting roadmap revision and selected
+contract version/digest into their result event. A stale initial binding prevents
+launch; a later result links back to the pinned context even if the plan changed.
+
+Bound supervised agents read a fresh scoped guide before each launch/follow-up.
+It is persisted as `target.buildContext` in the private run record and included in
+`PROMPT.txt`, explicitly marked as untrusted reference data. The binding mutation
+checks the pinned roadmap revision before provider launch. A stale guide prevents
+launch; active runs keep their original context. Existing policy revisions,
+family budgets, concurrency and follow-up limits continue to apply.
+
+Master-loop inspection now includes a bounded `rollingLedger` roadmap index and
+points to `read_build_guidance`. Chat models also have read-only
+`read_build_contract` for full contract versions. This connects the implemented
+supervised loop's context path. The general Rust controller, dependency planning,
+lease dispatch and independent verifier bridge still need the build-roadmap
+stages; these read operations do not enable an autonomous swarm.

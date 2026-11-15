@@ -89,10 +89,19 @@ with tempfile.TemporaryDirectory(prefix="hotbox-cli-") as temp:
     roadmap=created['roadmap']
     assert build('create',{'request_id':'road-create','title':'CLI roadmap','branch_ref':'declared-main'})['replayed']
     step=build('node.add',{'request_id':'road-step','roadmap':roadmap,'expected_revision':1,'kind':'step','title':'Run a command'})
+    contract=build('contract.save',{'request_id':'road-contract','roadmap':roadmap,'expected_revision':step['revision'],'node':step['node'],'acceptance':'Command result is linked','implementation':'src/main.cpp: run','verification':'Run CLI smoke in a temporary repository'})
+    assert build('contract.read',{'roadmap':roadmap,'contract':contract['contract']})['contract']['acceptance']=='Command result is linked'
     command=call('run','--category',category,'--build',roadmap,'--step',step['node'],'--',sys.executable,'-c',"print('bound command passed')")
     assert command['buildLinked'] and command['terminalSession'].startswith('terminal:')
     state=build('read',{'roadmap':roadmap})
     assert len(state['links'])==2 and state['master_chat']==1
+    guide=build('guide',{'roadmap':roadmap,'node':step['node']})
+    check=guide['items'][0]['checks'][0]
+    assert check['outcome']=='command_passed' and check['contract_match']=='same_version'
+    assert guide['items'][0]['verification']=='unverified'
+    detail=json.loads(call('read-event','--category',category,'--id',str(command['event']))['content'])
+    assert detail['buildContext']['contract']==contract['contract']
+
     document=build('document.save',{'request_id':'road-doc','roadmap':roadmap,'expected_revision':state['revision'],'node':step['node'],'title':'Build notes','content':'Initial version'})
     snapshot=build('checkpoint',{'request_id':'road-checkpoint','roadmap':roadmap,'expected_revision':document['revision']})
     second=build('document.save',{'request_id':'road-doc-two','roadmap':roadmap,'expected_revision':snapshot['revision'],'document':document['document'],'parent_version':document['version'],'content':'Later version'})

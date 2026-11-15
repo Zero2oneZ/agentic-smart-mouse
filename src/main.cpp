@@ -267,18 +267,21 @@ int main(int argc, char **argv) {
                 QTextStream(stderr) << "Link an existing workspace directory first\n";
                 return 2;
             }
+            QVariantMap buildContext;
             const auto buildRoad=option("--build"),buildStep=option("--step");
             if(!buildStep.isEmpty()&&buildRoad.isEmpty()){QTextStream(stderr)<<"--step requires --build\n";return 2;}
             if(!buildRoad.isEmpty()){
                 auto road=backend.buildAction("read",{{"schema_version",1},{"roadmap",buildRoad}});
                 if(road["workspace"].toInt()!=category){QTextStream(stderr)<<"The command workspace must match the roadmap workspace\n";return 2;}
                 if(!road["ok"].toBool()){QTextStream(stderr)<<road["error"].toString()<<'\n';return 2;}
+                buildContext={{"roadmap",buildRoad},{"node",buildStep},{"revision",road["revision"]}};
+                for(auto value:road["contracts"].toList())if(value.toMap()["node"].toString()==buildStep){buildContext["contract"]=value.toMap()["id"];buildContext["contract_digest"]=value.toMap()["digest"];break;}
                 if(!buildStep.isEmpty()){bool found=false;for(auto value:road["nodes"].toList())if(value.toMap()["id"].toString()==buildStep)found=true;if(!found){QTextStream(stderr)<<"Step is outside this roadmap\n";return 2;}}
             }
             const auto gitBefore=GitWorkspace::snapshot(path);
             qint64 started = backend.recordEvent(category, "command.started", description, description, path);
-            auto linkBuild=[&](qint64 event){if(buildRoad.isEmpty())return true;auto road=backend.buildAction("read",{{"schema_version",1},{"roadmap",buildRoad}});auto linked=backend.buildAction("link",{{"schema_version",1},{"request_id",QUuid::createUuid().toString(QUuid::Id128)},{"roadmap",buildRoad},{"node",buildStep},{"expected_revision",road["revision"]},{"kind","terminal_command"},{"ref",QString::number(event)}});return linked["ok"].toBool();};
-            if(!linkBuild(started)){QTextStream(stderr)<<"Could not bind terminal command to build step; command was not launched\n";return 1;}
+            auto linkBuild=[&](qint64 event,bool initial=false){if(buildRoad.isEmpty())return true;auto road=backend.buildAction("read",{{"schema_version",1},{"roadmap",buildRoad}});auto linked=backend.buildAction("link",{{"schema_version",1},{"request_id",QUuid::createUuid().toString(QUuid::Id128)},{"roadmap",buildRoad},{"node",buildStep},{"expected_revision",initial?buildContext["revision"]:road["revision"]},{"kind","terminal_command"},{"ref",QString::number(event)}});return linked["ok"].toBool();};
+            if(!linkBuild(started,true)){QTextStream(stderr)<<"Could not bind terminal command to build step; command was not launched\n";return 1;}
             QProcess process;
             process.setWorkingDirectory(path);
             process.setProcessChannelMode(QProcess::MergedChannels);
@@ -309,7 +312,7 @@ int main(int argc, char **argv) {
             }
             output += process.readAll();
             output = output.left(240000);
-            QJsonObject detail{{"terminalSession",QString("terminal:%1").arg(started)},{"gitBefore",QJsonObject::fromVariantMap(gitBefore)},{"gitAfter",QJsonObject::fromVariantMap(GitWorkspace::snapshot(path))},{"build",buildRoad},{"step",buildStep},{"command", description},
+            QJsonObject detail{{"buildContext",QJsonObject::fromVariantMap(buildContext)},{"terminalSession",QString("terminal:%1").arg(started)},{"gitBefore",QJsonObject::fromVariantMap(gitBefore)},{"gitAfter",QJsonObject::fromVariantMap(GitWorkspace::snapshot(path))},{"build",buildRoad},{"step",buildStep},{"command", description},
                                {"cwd", path},
                                {"output", SessionLedger::redact(QString::fromUtf8(output))},
                                {"exitCode", exitCode},

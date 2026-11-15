@@ -11,6 +11,7 @@ class BuildLedger {
 
   private:
     QVariantMap read(int scope, const QString &id) const;
+    QVariantMap guide(int scope, const QVariantMap &road, const QString &node) const;
     QSqlDatabase m_db;
     SessionLedger &m_events;
     QString m_directory, m_problem;

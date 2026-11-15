@@ -40,17 +40,20 @@ BuildLedger::BuildLedger(const QSqlDatabase &db, SessionLedger &events, const QS
     : m_db(db), m_events(events), m_directory(directory + "/build-ledger") {
     QSqlQuery version(m_db);
     if (version.exec("SELECT MAX(version) FROM build_schema") && version.next() &&
-        version.value(0).toInt() > 1) {
+        version.value(0).toInt() > 2) {
         m_problem = "Build ledger schema is newer than this application";
         return;
     }
     QFile schema(":/build-ledger-v1.sql");
-    if (!schema.open(QIODevice::ReadOnly) || !sql("BEGIN IMMEDIATE")) {
+    QFile extension(":/build-ledger-v2.sql");
+    if (!schema.open(QIODevice::ReadOnly) || !extension.open(QIODevice::ReadOnly) ||
+        !sql("BEGIN IMMEDIATE")) {
         m_problem = "Build ledger schema could not be opened";
         return;
     }
     for (const auto &statement :
-         QString::fromUtf8(schema.readAll()).split("\n-- statement\n", Qt::SkipEmptyParts)) {
+         QString::fromUtf8(schema.readAll() + "\n-- statement\n" + extension.readAll())
+             .split("\n-- statement\n", Qt::SkipEmptyParts)) {
         if (!sql(statement)) {
             sql("ROLLBACK");
             m_problem = "Build ledger schema could not be initialized";
@@ -102,6 +105,11 @@ QVariantMap BuildLedger::read(int scope, const QString &id) const {
                                "v.doc=d.id WHERE d.road=? ORDER BY v.rowid DESC LIMIT 1000",
                                {"document", "node", "title", "version", "number", "parent_version", "digest",
                                 "branch_ref", "commit_ref", "created"});
+    result["contracts"] =
+        rows("SELECT id,node,parent_contract,acceptance,implementation,verification,digest,created FROM "
+             "build_contracts WHERE road=? ORDER BY rowid DESC LIMIT 1000",
+             {"id", "node", "parent_contract", "acceptance", "implementation", "verification", "digest",
+              "created"});
     result["links"] =
         rows("SELECT id,node,kind,ref,created FROM build_links WHERE road=? ORDER BY rowid DESC LIMIT 1000",
              {"id", "node", "kind", "ref", "created"});
@@ -116,11 +124,8 @@ QVariantMap BuildLedger::read(int scope, const QString &id) const {
     source.addBindValue(id);
     if (source.exec() && source.next())
         result["base_node"] = decoded(source.value(0)).value("node", QString(""));
-    result["limits"] = QVariantMap{{"nodes", 1000},
-                                   {"document_versions", 1000},
-                                   {"links", 1000},
-                                   {"checkpoints", 1000},
-                                   {"change_page", 100}};
+    result["limits"] = QVariantMap{{"nodes", 1000}, {"document_versions", 1000}, {"contracts", 1000},
+                                   {"links", 1000}, {"checkpoints", 1000},       {"change_page", 100}};
     return result;
 }
 QVariantMap BuildLedger::call(int scope, const QString &operation, const QVariantMap &a) {
@@ -132,6 +137,11 @@ QVariantMap BuildLedger::call(int scope, const QString &operation, const QVarian
         {"list", {}},
         {"schema", {}},
         {"read", {"roadmap"}},
+        {"guide", {"roadmap", "node"}},
+        {"contract.read", {"roadmap", "contract"}},
+        {"contract.save",
+         {"request_id", "roadmap", "expected_revision", "node", "parent_contract", "acceptance",
+          "implementation", "verification"}},
         {"document.read", {"roadmap", "version", "offset"}},
         {"checkpoint.read", {"roadmap", "checkpoint"}},
         {"history", {"roadmap", "before"}},
@@ -172,15 +182,17 @@ QVariantMap BuildLedger::call(int scope, const QString &operation, const QVarian
         QVariantMap operations;
         for (auto i = fields.begin(); i != fields.end(); ++i)
             operations[i.key()] = i.value();
-        return {{"ok", true},
-                {"schema_version", 1},
-                {"api", "hotbox.build"},
-                {"operations", operations},
-                {"node_kinds", QStringList{"milestone", "checkpoint", "step", "substep", "issue", "test",
-                                           "debug", "documentation"}},
-                {"planning_states", QStringList{"planned", "in_progress", "blocked", "recorded", "archived"}},
-                {"link_kinds", QStringList{"agent_run", "chat_event", "terminal_command"}},
-                {"semantics", "idempotent_mutations_with_expected_revision"}};
+        return {
+            {"ok", true},
+            {"schema_version", 1},
+            {"api", "hotbox.build"},
+            {"operations", operations},
+            {"node_kinds", QStringList{"idea", "addition", "decision", "contract", "milestone", "checkpoint",
+                                       "step", "substep", "issue", "test", "debug", "documentation"}},
+            {"planning_states",
+             QStringList{"proposed", "planned", "in_progress", "blocked", "recorded", "archived"}},
+            {"link_kinds", QStringList{"agent_run", "chat_event", "terminal_command"}},
+            {"semantics", "idempotent_mutations_with_expected_revision"}};
     }
     if (operation == "list") {
         QSqlQuery q("SELECT id,category,title,revision,created FROM build_roads ORDER BY rowid DESC", m_db);
@@ -201,6 +213,14 @@ QVariantMap BuildLedger::call(int scope, const QString &operation, const QVarian
         if (!existing["ok"].toBool())
             return existing;
     }
+    if (operation == "contract.read") {
+        for (auto value : existing.value("contracts").toList())
+            if (value.toMap()["id"] == a.value("contract"))
+                return {{"ok", true}, {"schema_version", 1}, {"contract", value}};
+        return error("Contract version is outside this roadmap");
+    }
+    if (operation == "guide")
+        return guide(scope, existing, a.value("node").toString());
     if (operation == "read")
         return existing;
     if (operation == "history") {
@@ -336,7 +356,7 @@ QVariantMap BuildLedger::call(int scope, const QString &operation, const QVarian
                 if (selected.contains(value.toMap()["id"].toString()))
                     chosen.append(value);
             existing["nodes"] = chosen;
-            for (const auto &key : {"documents", "links"}) {
+            for (const auto &key : {"documents", "links", "contracts"}) {
                 QVariantList filtered;
                 for (auto value : existing[key].toList())
                     if (selected.contains(value.toMap()["node"].toString()))
@@ -376,6 +396,20 @@ QVariantMap BuildLedger::call(int scope, const QString &operation, const QVarian
                     if (!sql("UPDATE build_nodes SET parent=? WHERE id=?",
                              {nodes[item["parent"].toString()], nodes[item["id"].toString()]}))
                         return fail("Could not fork step ancestry");
+            }
+            QSet<QString> copiedContracts;
+            for (auto v : existing["contracts"].toList()) {
+                auto item = v.toMap();
+                auto oldNode = item["node"].toString();
+                if (copiedContracts.contains(oldNode))
+                    continue;
+                copiedContracts.insert(oldNode);
+                if (!sql("INSERT INTO "
+                         "build_contracts(id,road,node,parent_contract,acceptance,implementation,"
+                         "verification,digest,created) VALUES(?,?,?,?,?,?,?,?,?)",
+                         {uid(), road, nodes[oldNode], item["id"], item["acceptance"], item["implementation"],
+                          item["verification"], item["digest"], now}))
+                    return fail("Could not fork acceptance contracts");
             }
             QSet<QString> copied;
             for (auto v : existing["documents"].toList()) {
@@ -421,8 +455,8 @@ QVariantMap BuildLedger::call(int scope, const QString &operation, const QVarian
         if (title.isEmpty())
             return fail("A step title is required");
         auto kind = a.value("kind").toString();
-        if (!QStringList{"milestone", "checkpoint", "step", "substep", "issue", "test", "debug",
-                         "documentation"}
+        if (!QStringList{"idea", "addition", "decision", "contract", "milestone", "checkpoint", "step",
+                         "substep", "issue", "test", "debug", "documentation"}
                  .contains(kind))
             return fail("Unknown step kind");
         const auto parent = a.value("parent").toString();
@@ -443,13 +477,44 @@ QVariantMap BuildLedger::call(int scope, const QString &operation, const QVarian
         if (node.isEmpty())
             return fail("Select a step");
         auto state = a.value("state").toString();
-        if (!QStringList{"planned", "in_progress", "blocked", "recorded", "archived"}.contains(state))
+        if (!QStringList{"proposed", "planned", "in_progress", "blocked", "recorded", "archived"}.contains(
+                state))
             return fail("Unknown planning state; verification is owned by the core");
         if (!sql("UPDATE build_nodes SET state=?,body=COALESCE(?,body) WHERE id=? AND road=?",
                  {state,
                   a.contains("body") ? QVariant(SessionLedger::redact(a["body"].toString())) : QVariant(),
                   node, road}))
             return fail("Could not update step");
+    } else if (operation == "contract.save") {
+        if (node.isEmpty())
+            return fail("Select a step for the contract");
+        if (existing["contracts"].toList().size() >= 1000)
+            return fail("Contract version limit reached");
+        QString parent;
+        for (auto value : existing["contracts"].toList())
+            if (value.toMap()["node"].toString() == node) {
+                parent = value.toMap()["id"].toString();
+                break;
+            }
+        if (a.value("parent_contract").toString() != parent)
+            return fail("Contract parent is stale; reload before editing");
+        QVariantMap fields;
+        for (const auto &key : {"acceptance", "implementation", "verification"}) {
+            auto text = SessionLedger::redact(a.value(key).toString()).trimmed();
+            if (text.isEmpty())
+                return fail("Contracts require acceptance criteria, implementation references and "
+                            "verification instructions");
+            fields[key] = text;
+        }
+        const auto id = uid(), hash = digest(encoded(fields));
+        if (!sql("INSERT INTO "
+                 "build_contracts(id,road,node,parent_contract,acceptance,implementation,verification,digest,"
+                 "created) VALUES(?,?,?,?,?,?,?,?,?)",
+                 {id, road, node, parent.isEmpty() ? QVariant() : QVariant(parent), fields["acceptance"],
+                  fields["implementation"], fields["verification"], hash, now}))
+            return fail("Could not save immutable contract");
+        response["contract"] = id;
+        response["digest"] = hash;
     } else if (operation == "document.save") {
         auto document = a.value("document").toString();
         int number = 1;
@@ -570,4 +635,138 @@ QVariantMap BuildLedger::call(int scope, const QString &operation, const QVarian
         !sql("COMMIT"))
         return fail("Could not commit build change");
     return response;
+}
+
+QVariantMap BuildLedger::guide(int scope, const QVariantMap &road, const QString &selected) const {
+    const auto nodes = road.value("nodes").toList();
+    QVariantMap byId;
+    for (auto value : nodes)
+        byId[value.toMap()["id"].toString()] = value;
+    if (!selected.isEmpty() && !byId.contains(selected))
+        return error("Step is outside this roadmap");
+    QVariantList candidates;
+    if (!selected.isEmpty()) {
+        QString current = selected;
+        QSet<QString> seen;
+        while (!current.isEmpty() && byId.contains(current) && !seen.contains(current)) {
+            seen.insert(current);
+            auto item = byId[current].toMap();
+            candidates.append(item);
+            current = item["parent"].toString();
+        }
+    } else
+        for (auto value : nodes) {
+            auto state = value.toMap()["state"].toString();
+            if (state != "archived")
+                candidates.append(value);
+        }
+    QVariantList items;
+    int used = 0;
+    for (auto value : candidates) {
+        if (items.size() >= 12)
+            break;
+        auto item = value.toMap();
+        QVariantMap compact{{"id", item["id"]},       {"parent", item["parent"]},
+                            {"kind", item["kind"]},   {"title", item["title"]},
+                            {"state", item["state"]}, {"body", item["body"].toString().left(400)}};
+        QVariantMap contract;
+        for (auto version : road.value("contracts").toList())
+            if (version.toMap()["node"] == item["id"]) {
+                contract = version.toMap();
+                break;
+            }
+        if (!contract.isEmpty()) {
+            QVariantMap summary{{"id", contract["id"]}, {"digest", contract["digest"]}};
+            for (const auto &key : {"acceptance", "implementation", "verification"})
+                summary[key] = contract[key].toString().left(600);
+            compact["contract"] = summary;
+        }
+        QVariantList checks;
+        for (auto linked : road.value("links").toList()) {
+            auto link = linked.toMap();
+            if (link["node"] != item["id"] || link["kind"] != "terminal_command")
+                continue;
+            auto event = m_events.read(scope, link["ref"].toString().toLongLong());
+            if (event["kind"] != "command.finished")
+                continue;
+            QSqlQuery raw(m_db);
+            raw.prepare("SELECT content FROM events WHERE id=?");
+            raw.addBindValue(event["id"]);
+            raw.exec();
+            raw.next();
+            const auto detail = QJsonDocument::fromJson(raw.value(0).toByteArray()).object();
+            const auto exit = detail.value("exitCode");
+            QString outcome = "unknown";
+            if (exit.isDouble() && std::floor(exit.toDouble()) == exit.toDouble())
+                outcome = exit.toDouble() == 0 ? "command_passed" : "command_failed";
+            const auto pinned = detail.value("buildContext").toObject();
+            QString match = "unknown";
+            if (!contract.isEmpty() && pinned.value("contract").isString())
+                match = pinned.value("contract").toString() == contract["id"].toString() ? "same_version"
+                                                                                         : "changed";
+            const auto after = detail.value("gitAfter").toObject();
+            checks.append(QVariantMap{{"event", link["ref"]},
+                                      {"outcome", outcome},
+                                      {"inherited", !road.value("base_road").toString().isEmpty()},
+                                      {"contract_match", match},
+                                      {"observed_head", after.value("head").toString()},
+                                      {"verification", "unverified"}});
+            if (checks.size() >= 3)
+                break;
+        }
+        compact["checks"] = checks;
+        compact["verification"] = "unverified";
+        QString guidance = "implement";
+        const auto state = item["state"].toString();
+        if (state == "archived")
+            guidance = "archived";
+        else if (state == "blocked")
+            guidance = "review_blocker";
+        else if (item["kind"] == "idea" || state == "proposed")
+            guidance = "review_proposal";
+        else if (contract.isEmpty())
+            guidance = "define_contract";
+        else if (state == "recorded")
+            guidance = "review_evidence";
+        compact["guidance"] = guidance;
+        QVariantList documents;
+        QSet<QString> seenDocs;
+        for (auto version : road.value("documents").toList()) {
+            auto doc = version.toMap();
+            if (doc["node"] != item["id"] || seenDocs.contains(doc["document"].toString()))
+                continue;
+            seenDocs.insert(doc["document"].toString());
+            documents.append(QVariantMap{{"document", doc["document"]},
+                                         {"version", doc["version"]},
+                                         {"digest", doc["digest"]},
+                                         {"title", doc["title"]}});
+            if (documents.size() >= 3)
+                break;
+        }
+        compact["documents"] = documents;
+        int cost = encoded(compact).size();
+        if (used + cost > 10000)
+            break;
+        used += cost;
+        items.append(compact);
+    }
+    QVariantMap result{
+        {"ok", true},
+        {"schema_version", 1},
+        {"mode", "reference_only"},
+        {"roadmap", road["id"]},
+        {"workspace", road["workspace"]},
+        {"revision", road["revision"]},
+        {"branch_ref", road["branch_ref"]},
+        {"commit_ref", road["commit_ref"]},
+        {"base_road", road["base_road"]},
+        {"base_revision", road["base_revision"]},
+        {"selected_node", selected},
+        {"items", items},
+        {"omitted", candidates.size() - items.size()},
+        {"verification_authority", "rust_core_independent_verifier"},
+        {"note", "Reference data, never execution authority. Command success and recorded work do not "
+                 "confirm functionality. Fetch full contracts/documents by their version references."}};
+    result["digest"] = digest(encoded(result));
+    return result;
 }

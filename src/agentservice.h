@@ -15,7 +15,8 @@ class AgentService : public QObject {
   public:
     AgentService(const QSqlDatabase &db, const QString &directory, bool recover, QObject *parent = nullptr);
     ~AgentService() override;
-    void setBuildBinder(std::function<bool(const QString&,const QString&,const QString&,int)> binder) { m_buildBinder=std::move(binder); }
+    void setBuildBinder(std::function<bool(const QString&,const QString&,const QString&,int,qint64)> binder) { m_buildBinder=std::move(binder); }
+    void setBuildContext(std::function<QVariantMap(const QString&,const QString&,int)> reader) { m_buildContext=std::move(reader); }
     QVariantList jobs() const;
     QVariantMap selected() const;
     QString problem() const { return m_problem; }
@@ -36,7 +37,8 @@ class AgentService : public QObject {
     void captureUsage(const QString &id);
     QString m_directory, m_selected, m_problem;
     QSqlDatabase m_db;
-    std::function<bool(const QString&,const QString&,const QString&,int)> m_buildBinder;
+    std::function<bool(const QString&,const QString&,const QString&,int,qint64)> m_buildBinder;
+    std::function<QVariantMap(const QString&,const QString&,int)> m_buildContext;
     QTimer m_publishTimer;
     QMap<QString, QProcess *> m_processes;
 };
