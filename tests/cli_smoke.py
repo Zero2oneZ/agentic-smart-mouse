@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise headless session commands in an isolated repository and database."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -9,6 +10,9 @@ import tempfile
 app = str(Path(sys.argv[1]).resolve())
 with tempfile.TemporaryDirectory(prefix="hotbox-cli-") as temp:
     root = Path(temp)
+    runtime=root / "runtime"
+    runtime.mkdir(mode=0o700)
+    os.environ["XDG_RUNTIME_DIR"]=str(runtime)
     source = root / "source"
     source.mkdir()
     data = root / "data"
@@ -76,4 +80,13 @@ with tempfile.TemporaryDirectory(prefix="hotbox-cli-") as temp:
     registry = call("architecture", "catalog", "--category", library_workspace)
     assert registry["attachments"] and len(registry["genres"]) == 1
     call("architecture", "ensure", "--category", library_workspace, "--capabilities", "music", "--artist", "../escape", expected=1)
+    health=call("doctor")
+    assert health["ok"] and health["databaseOk"] and health["coreAvailable"]
+    locations={row["name"]:row for row in health["storage"]}
+    assert len({row["path"] for row in locations.values()}) == len(locations)
+    tool_root=Path(architecture["toolRoot"])
+    tracked=subprocess.run(["git","-C",str(tool_root),"ls-files"],capture_output=True,text=True,check=True).stdout
+    assert not any(name in tracked for name in ("hotbox.sqlite3","orchestration.sqlite3","agent-runs","run.log"))
+    assert data.joinpath("hotbox.sqlite3").exists()
+
 print("CLI workflow passed: sessions, Git, segments, architecture registration, read-only plans, and reusable storage.")

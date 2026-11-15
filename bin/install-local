@@ -1,81 +1,56 @@
-#!/bin/sh
-set -eu
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-"$ROOT/bin/build"
-exec python3 - "$ROOT" <<'PY'
-from pathlib import Path
-import datetime
+#!/usr/bin/env python3
+"""Build and install the GUI and core helper together into the user's bin directory."""
 import os
-import shutil
-import socket
+import datetime
 import sqlite3
+from contextlib import closing
+from pathlib import Path
+import shutil
 import subprocess
 import sys
-import time
+import tempfile
 
-root = Path(sys.argv[1])
-home = Path.home()
-data = Path(os.environ.get('XDG_DATA_HOME', str(home / '.local/share'))) / 'hotbox'
-data.mkdir(parents=True, exist_ok=True)
-data.chmod(0o700)
-backups = data / 'backups'
-backups.mkdir(exist_ok=True)
+root=Path(__file__).resolve().parent.parent
+if sys.argv[1:] not in ([], ['--desktop-only']):
+    raise SystemExit('Usage: bin/install-local [--desktop-only]')
+subprocess.run([str(root/'bin/build'),*sys.argv[1:]],check=True)
+home=Path.home()
+destination=home/'.local/bin'
+destination.mkdir(parents=True,exist_ok=True)
+data=Path(os.environ.get('XDG_DATA_HOME',home/'.local/share'))/'hotbox'
+backups=data/'backups'
+backups.mkdir(parents=True,exist_ok=True)
 backups.chmod(0o700)
-stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
-for name in ('hotbox.sqlite3', 'orchestration.sqlite3'):
-    database = data / name
+stamp=datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+# SQLite's backup API includes committed WAL data, unlike copying a live DB file.
+for name in ('hotbox.sqlite3','orchestration.sqlite3'):
+    database=data/name
     if database.exists():
-        backup = backups / ('before-update-' + stamp + '-' + name)
-        with sqlite3.connect('file:' + str(database) + '?mode=ro', uri=True) as source:
-            with sqlite3.connect(backup) as target:
+        backup=backups/('before-update-'+stamp+'-'+name)
+        with closing(sqlite3.connect(database.as_uri()+'?mode=ro',uri=True)) as source:
+            with closing(sqlite3.connect(backup)) as target:
                 source.backup(target)
         backup.chmod(0o600)
-        print('Backed up private state:', backup)
-
-runtime = Path(os.environ.get('XDG_RUNTIME_DIR', '/run/user/' + str(os.getuid())))
-endpoint = runtime / 'hotbox-ipc'
-if endpoint.exists():
-    try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-            connection.settimeout(2)
-            connection.connect(str(endpoint))
-            connection.sendall(b'quit\n')
-        for _ in range(30):
-            if not endpoint.exists():
-                break
-            time.sleep(0.1)
-        if endpoint.exists():
-            raise SystemExit('The existing app did not exit; installation stopped.')
-    except (ConnectionRefusedError, FileNotFoundError):
-        pass
-
-binary = home / '.local/bin/hotbox'
-for name in ('hotbox', 'hotbox-core'):
-    previous_binary = home / '.local/bin' / name
-    if previous_binary.exists():
-        shutil.copy2(previous_binary, backups / (name + '-' + stamp))
-files = [
-    (root / 'build/hotbox', binary),
-    (root / 'build/hotbox-core', home / '.local/bin/hotbox-core'),
-    (root / 'pkgbuild/hotbox.desktop', home / '.local/share/applications/hotbox.desktop'),
-    (root / 'pkgbuild/hotbox.svg', home / '.local/share/icons/hicolor/scalable/apps/hotbox.svg'),
-]
-for source, destination in files:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(destination.name + '.installing')
-    shutil.copy2(source, temporary)
-    os.replace(temporary, destination)
-# Leave desktop keyboard integration untouched; configure it only on explicit request.
-state = Path(os.environ.get('XDG_STATE_HOME', str(home / '.local/state'))) / 'hotbox'
-state.mkdir(parents=True, exist_ok=True)
-state.chmod(0o700)
-logpath = state / 'runtime.log'
-with logpath.open('ab') as log:
-    logpath.chmod(0o600)
-    daemon = subprocess.Popen([str(binary), 'daemon'], stdin=subprocess.DEVNULL,
-                              stdout=log, stderr=log, start_new_session=True)
-time.sleep(0.5)
-if daemon.poll() is not None:
-    raise SystemExit('Installed app did not stay running. Inspect ' + str(logpath))
-print('Installed and started Hotbox:', binary)
-PY
+for name in ('hotbox','hotbox-core'):
+    previous=destination/name
+    if previous.exists():
+        shutil.copy2(previous,backups/(name+'-'+stamp))
+files=[(root/'build/hotbox-core',destination/'hotbox-core'),
+       (root/'build/hotbox',destination/'hotbox'),
+       (root/'pkgbuild/hotbox.desktop',Path(os.environ.get('XDG_DATA_HOME',home/'.local/share'))/'applications/hotbox.desktop'),
+       (root/'pkgbuild/hotbox.svg',Path(os.environ.get('XDG_DATA_HOME',home/'.local/share'))/'icons/hicolor/scalable/apps/hotbox.svg')]
+staged=[]
+try:
+    for source,target in files:
+        target.parent.mkdir(parents=True,exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=target.parent,prefix=target.name+'.new-',delete=False) as file:
+            temporary=Path(file.name)
+        staged.append((temporary,target))
+        shutil.copy2(source,temporary)
+        temporary.chmod(0o755 if target.parent==destination else 0o644)
+    for temporary,target in staged:
+        os.replace(temporary,target)
+finally:
+    for temporary,_ in staged:
+        temporary.unlink(missing_ok=True)
+print('Backed up private state and previous binaries; installed GUI, core and launcher. Running processes are unchanged.')

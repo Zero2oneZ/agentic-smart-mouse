@@ -1,9 +1,27 @@
-#!/bin/sh
-set -eu
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-"$ROOT/bin/build"
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd -- "$(dirname -- "$0")/.." && pwd)"
+build_args=()
+offline=false
+while (($#)); do
+    case "$1" in
+        --desktop-only) build_args+=("--desktop-only"); shift ;;
+        --offline) offline=true; shift ;;
+        *) break ;;
+    esac
+done
+"$ROOT/bin/build" "${build_args[@]}"
 mkdir -p "$ROOT/build/tests"
 cd "$ROOT/build/tests"
 qmake6 "$ROOT/tests/hotbox_tests.pro"
-make -j4
-QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= ./hotbox_tests
+make -j4 --jobserver-style=pipe
+runtime=$(mktemp -d /tmp/hotbox-test-runtime.XXXXXX)
+trap 'rm -rf -- "$runtime"' EXIT
+export XDG_RUNTIME_DIR="$runtime" QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=
+if "$offline"; then
+    echo "OFFLINE PROFILE: excluding 3 tests that bind local TCP mock servers; no model network checks are claimed."
+    mapfile -t cases < <(./hotbox_tests -functions | sed 's/()$//' | rg -v '^(streamSavesToOriginAndIncludesBrief|failedConnectionRetainsUserMessage|modelToolLoopUsesOriginalWorkspace)$')
+    ./hotbox_tests "${cases[@]}" "$@"
+else
+    ./hotbox_tests "$@"
+fi

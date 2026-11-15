@@ -1,10 +1,27 @@
 #!/bin/sh
 set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+mode="${1:-}"
+if [ "$mode" != "" ] && [ "$mode" != "--desktop-only" ]; then
+    echo "Usage: bin/build [--desktop-only]" >&2
+    exit 2
+fi
+for tool in qmake6 make g++; do
+    command -v "$tool" >/dev/null 2>&1 || { echo "Missing build tool: $tool" >&2; exit 1; }
+done
 mkdir -p "$ROOT/build"
-CARGO="${CARGO:-cargo}"
-"$CARGO" build --manifest-path "$ROOT/core/Cargo.toml" --target-dir "$ROOT/core/target" --locked --release
-cp "$ROOT/core/target/release/hotbox-core" "$ROOT/build/hotbox-core"
+if [ "$mode" = "--desktop-only" ]; then
+    test -x "$ROOT/build/hotbox-core" || { echo "Desktop-only mode requires build/hotbox-core from an earlier full build." >&2; exit 1; }
+    echo "Desktop-only build: reusing the existing Rust helper; Rust sources are NOT rebuilt."
+else
+    CARGO="${CARGO:-cargo}"
+    command -v "$CARGO" >/dev/null 2>&1 || {
+        echo "Full build requires Cargo/Rust. Install the Rust toolchain, or explicitly use bin/build --desktop-only with an existing helper." >&2
+        exit 1
+    }
+    "$CARGO" build --manifest-path "$ROOT/core/Cargo.toml" --target-dir "$ROOT/core/target" --locked --release
+    cp "$ROOT/core/target/release/hotbox-core" "$ROOT/build/hotbox-core"
+fi
 cd "$ROOT/build"
 qmake6 "$ROOT/hotbox.pro"
-make -j4
+make -j4 --jobserver-style=pipe
