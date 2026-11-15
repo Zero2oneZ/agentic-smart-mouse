@@ -13,5 +13,7 @@ package archives out of Git. Screenshots committed under `docs/` must contain
 only sample application content, never captures of the user's desktop.
 
 Update the README when implementation or verification status changes. Model
-chat currently supports replies and project context, but cannot edit files or
-execute builds.
+chat supports scoped event lookup and focused handoffs, but cannot edit files,
+execute commands, or push Git. Git worker tests must use temporary repositories
+and local bare remotes. Background checkpoints apply only to managed worktrees
+and explicitly selected files; keep session data outside every pushed branch.

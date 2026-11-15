@@ -1,4 +1,7 @@
 #pragma once
+#include "sessionledger.h"
+#include <QFutureWatcher>
+#include <QJsonArray>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QObject>
@@ -7,11 +10,15 @@
 #include <QSqlDatabase>
 #include <QTimer>
 #include <QVariantList>
+#include <memory>
 
 class Backend : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantList categories READ categories NOTIFY changed)
     Q_PROPERTY(QVariantList messages READ messages NOTIFY changed)
+    Q_PROPERTY(QVariantList timeline READ timeline NOTIFY activityChanged)
+    Q_PROPERTY(QVariantMap gitState READ gitState NOTIFY activityChanged)
+    Q_PROPERTY(bool taskBusy READ taskBusy NOTIFY activityChanged)
     Q_PROPERTY(QVariantList bindings READ bindings NOTIFY bindingsChanged)
     Q_PROPERTY(int currentId READ currentId NOTIFY changed)
     Q_PROPERTY(QString title READ title NOTIFY changed)
@@ -58,8 +65,27 @@ class Backend : public QObject {
     Q_INVOKABLE QVariantList archivedCategories() const;
     Q_INVOKABLE void clearStatus();
     void setStatus(const QString &text);
+    QVariantList timeline() const;
+    QVariantMap gitState() const;
+    bool taskBusy() const { return m_gitInFlight; }
+    QVariantMap lastGitResult() const { return m_lastGitResult; }
+    Q_INVOKABLE QVariantList eventPage(int category, qint64 before = 0) const;
+    Q_INVOKABLE QVariantMap readEvent(qint64 id, int offset = 0) const;
+    Q_INVOKABLE qint64 recordEvent(int category, const QString &kind, const QString &summary,
+                                   const QString &content, const QString &source = QString(""));
+    Q_INVOKABLE bool attachSession(const QString &path);
+    Q_INVOKABLE int focusWorkspace(int category, const QString &name, const QString &handoff);
+    Q_INVOKABLE void captureGit();
+    Q_INVOKABLE void forkGit();
+    Q_INVOKABLE void configureGit(const QString &paths, const QString &remote, bool automatic, bool push);
+    Q_INVOKABLE void checkpointGit();
+    void processBackgroundGit();
+    QJsonArray requestContext() const;
+    QVariantMap contextTool(const QString &name, const QVariantMap &arguments, int scope = 0);
+
   signals:
     void changed();
+    void activityChanged();
     void statusChanged();
     void busyChanged();
     void expandedChanged();
@@ -77,6 +103,24 @@ class Backend : public QObject {
     int append(int category, const QString &role, const QString &content);
     void updateMessage(int id, const QString &content);
     void consumeStream(bool final = false);
+    void startReply();
+    void collectTools(const QJsonObject &delta);
+    QJsonArray toolDefinitions() const;
+    void gitTask(const QString &operation, int category);
+    std::unique_ptr<SessionLedger> m_ledger;
+    QFutureWatcher<QVariantMap> m_gitTask;
+    QTimer m_background, m_activityPoll;
+    qint64 m_dataVersion = -1;
+    unsigned m_backgroundNext = 0;
+    int m_taskCategory = 1;
+    QString m_taskOperation;
+    bool m_gitInFlight = false;
+    QVariantMap m_lastGitResult;
+    QJsonArray m_context;
+    QMap<int, QJsonObject> m_toolCalls;
+    int m_toolRounds = 0;
+    bool m_cancelled = false;
+
     QSqlDatabase m_db;
     QString m_connection, m_directory, m_status;
     int m_current = 1, m_replyCategory = 1, m_replyMessage = 0;

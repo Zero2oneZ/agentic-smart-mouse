@@ -5,4 +5,4 @@ mkdir -p "$ROOT/build/tests"
 cd "$ROOT/build/tests"
 qmake6 "$ROOT/tests/hotbox_tests.pro"
 make -j4
-QT_QPA_PLATFORM=offscreen ./hotbox_tests
+QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= ./hotbox_tests

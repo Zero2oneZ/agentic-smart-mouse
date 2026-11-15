@@ -3,6 +3,8 @@
 #include "translator.h"
 #include <QCursor>
 #include <QDir>
+#include <QElapsedTimer>
+#include <QEventLoop>
 #include <QFile>
 #include <QGuiApplication>
 #include <QIcon>
@@ -15,6 +17,7 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QRegularExpression>
 #include <QScreen>
 #include <QStandardPaths>
 #include <QTextStream>
@@ -39,13 +42,19 @@ int main(int argc, char **argv) {
         return a;
     }();
     const bool check = raw.contains("check"), smoke = raw.contains("--smoke");
-    if (check || smoke)
+    const QString commandName = raw.value(0, "open");
+    const bool headless = QStringList{"events",   "read-event", "attach", "record",     "focus",
+                                      "snapshot", "branch",     "sync",   "git-config", "run"}
+                              .contains(commandName);
+    if (check || smoke || headless) {
         qputenv("QT_QPA_PLATFORM", "offscreen");
+        qputenv("QT_QPA_PLATFORMTHEME", "");
+    }
     if (smoke)
         qputenv("QT_QUICK_BACKEND", "software");
     QGuiApplication app(argc, argv);
     app.setApplicationName("hotbox");
-    app.setApplicationVersion("0.1.0");
+    app.setApplicationVersion("0.2.0");
     app.setDesktopFileName("hotbox");
     app.setQuitOnLastWindowClosed(false);
     app.setWindowIcon(QIcon::fromTheme("hotbox"));
@@ -57,9 +66,17 @@ int main(int argc, char **argv) {
             return 2;
         dataDir = raw[n + 1] + "/data";
     }
+    const int separatorIndex = raw.indexOf("--");
+    const QStringList options = separatorIndex >= 0 ? raw.mid(0, separatorIndex) : raw;
+    auto option = [&](const QString &name, const QString &fallback = QString()) {
+        int i = options.indexOf(name);
+        return i >= 0 && i + 1 < options.size() ? options[i + 1] : fallback;
+    };
+    if (options.contains("--data-dir"))
+        dataDir = option("--data-dir");
     QString serverPath = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation) + "/hotbox-ipc";
     QLocalSocket client;
-    if (!smoke && !check) {
+    if (!smoke && !check && !headless) {
         client.connectToServer(serverPath);
         if (client.waitForConnected(150)) {
             client.write(command.toUtf8() + "\n");
@@ -72,6 +89,148 @@ int main(int argc, char **argv) {
         }
     }
     Backend backend(dataDir);
+    if (headless) {
+        bool valid = false;
+        int category = option("--category", "1").toInt(&valid);
+        if (!valid || category <= 0) {
+            QTextStream(stderr) << "Invalid category ID\n";
+            return 2;
+        }
+        backend.select(category);
+        if (backend.currentId() != category) {
+            QTextStream(stderr) << "Workspace does not exist\n";
+            return 2;
+        }
+        QJsonObject result;
+        int exitCode = 0;
+        if (command == "events")
+            result = {{"events", QJsonArray::fromVariantList(
+                                     backend.eventPage(category, option("--before", "0").toLongLong()))}};
+        else if (command == "read-event")
+            result = QJsonObject::fromVariantMap(
+                backend.readEvent(option("--id").toLongLong(), option("--offset", "0").toInt()));
+        else if (command == "attach")
+            result = {{"ok", backend.attachSession(option("--path"))}};
+        else if (command == "record")
+            result = {{"event", backend.recordEvent(category, option("--kind", "session.note"),
+                                                    option("--summary", "Session note"),
+                                                    option("--content", QString("")),
+                                                    option("--source", QString("")))}};
+        else if (command == "focus") {
+            int id = backend.focusWorkspace(category, option("--name"), option("--brief"));
+            if (id > 0 && options.contains("--folder"))
+                backend.updateCategory(id, backend.title(), option("--folder"), backend.brief());
+            result = {{"category", id}};
+        } else if (command == "git-config") {
+            backend.configureGit(option("--paths", QString("")), option("--remote", QString("")),
+                                 options.contains("--automatic"), options.contains("--push"));
+            result = QJsonObject::fromVariantMap(backend.gitState());
+            result["ok"] =
+                backend.gitState().value("managed").toBool() &&
+                backend.gitState().value("paths").toString() == option("--paths", QString("")) &&
+                backend.gitState().value("remote").toString() == option("--remote", QString("")) &&
+                backend.gitState().value("automatic").toBool() == options.contains("--automatic") &&
+                backend.gitState().value("push").toBool() == options.contains("--push");
+        } else if (command == "run") {
+            int separator = raw.indexOf("--");
+            QStringList args = separator >= 0 ? raw.mid(separator + 1) : QStringList{};
+            if (args.isEmpty()) {
+                QTextStream(stderr) << "Usage: hotbox run --category ID -- PROGRAM ARGUMENTS\n";
+                return 2;
+            }
+            QStringList safe = args;
+            bool secretNext = false;
+            for (QString &arg : safe) {
+                if (secretNext) {
+                    arg = "[REDACTED]";
+                    secretNext = false;
+                } else if (QRegularExpression("(?i)^--?(password|token|api-key|secret|authorization)$")
+                               .match(arg)
+                               .hasMatch())
+                    secretNext = true;
+            }
+            QString description = SessionLedger::redact(safe.join(' '));
+            QString path = backend.folder();
+            if (path.startsWith("~/"))
+                path = QDir::homePath() + path.mid(1);
+            if (!QFileInfo(path).isDir()) {
+                QTextStream(stderr) << "Link an existing workspace directory first\n";
+                return 2;
+            }
+            qint64 started = backend.recordEvent(category, "command.started", description, description, path);
+            QProcess process;
+            process.setWorkingDirectory(path);
+            process.setProcessChannelMode(QProcess::MergedChannels);
+            QString program = args.takeFirst();
+            process.start(program, args);
+            QByteArray output;
+            QElapsedTimer elapsed;
+            elapsed.start();
+            bool timeout = false;
+            if (process.waitForStarted(3000)) {
+                while (process.state() != QProcess::NotRunning) {
+                    process.waitForFinished(100);
+                    output += process.readAll();
+                    if (output.size() > 240000)
+                        output = output.left(240000);
+                    if (elapsed.elapsed() > 120000) {
+                        timeout = true;
+                        process.kill();
+                        process.waitForFinished(1000);
+                        break;
+                    }
+                }
+                exitCode =
+                    timeout ? 124 : (process.exitStatus() == QProcess::NormalExit ? process.exitCode() : 1);
+            } else {
+                exitCode = 1;
+                output = process.errorString().toUtf8();
+            }
+            output += process.readAll();
+            output = output.left(240000);
+            QJsonObject detail{{"command", description},
+                               {"cwd", path},
+                               {"output", SessionLedger::redact(QString::fromUtf8(output))},
+                               {"exitCode", exitCode},
+                               {"startedEvent", double(started)},
+                               {"durationMs", double(elapsed.elapsed())},
+                               {"timedOut", timeout}};
+            while (QJsonDocument(detail).toJson(QJsonDocument::Compact).size() > 240000) {
+                detail["output"] = detail["output"].toString().left(detail["output"].toString().size() / 2);
+                detail["outputTruncated"] = true;
+            }
+            auto event = backend.recordEvent(category, "command.finished",
+                                             description + QString(" · exit %1").arg(exitCode),
+                                             QString::fromUtf8(QJsonDocument(detail).toJson()), path);
+            result = {{"event", double(event)}, {"exitCode", exitCode}};
+        } else {
+            if (command == "snapshot")
+                backend.captureGit();
+            else if (command == "branch")
+                backend.forkGit();
+            else
+                backend.checkpointGit();
+            if (backend.taskBusy()) {
+                QEventLoop loop;
+                QObject::connect(&backend, &Backend::activityChanged, &loop, [&] {
+                    if (!backend.taskBusy())
+                        loop.quit();
+                });
+                loop.exec();
+            }
+            result = {{"ok", backend.lastGitResult().value("ok").toBool()},
+                      {"result", QJsonObject::fromVariantMap(backend.lastGitResult())},
+                      {"git", QJsonObject::fromVariantMap(backend.gitState())}};
+        }
+        if (!backend.status().isEmpty())
+            result["status"] = backend.status();
+        if (result.contains("error") || (result.contains("ok") && !result["ok"].toBool()) ||
+            (result.contains("category") && result["category"].toInt() < 1) ||
+            (result.contains("event") && result["event"].toDouble() < 1))
+            exitCode = 1;
+        QTextStream(stdout) << QJsonDocument(result).toJson(QJsonDocument::Compact) << '\n';
+        return exitCode;
+    }
     if (check) {
         QJsonObject result{{"ok", backend.status().isEmpty()},
                            {"categories", int(backend.categories().size())},
@@ -90,7 +249,7 @@ int main(int argc, char **argv) {
         }
     }
     QQuickStyle::setStyle("Material");
-    Theme theme;
+    Theme theme(smoke ? dataDir + "/preview-theme" : QString());
     Translator translator;
     app.installTranslator(&translator);
     QQmlApplicationEngine engine;
@@ -188,16 +347,24 @@ int main(int argc, char **argv) {
         const QString output = raw[raw.indexOf("--smoke") + 1];
         QDir().mkpath(output);
         backend.addCategory("Weather app", "/tmp/weather", "Build an hourly weather display.");
+        backend.recordEvent(
+            backend.currentId(), "command.finished", "Sample build passed",
+            "Command: make -j4\nWorking directory: /tmp/weather\nExit code: 0\nAll checks passed.",
+            "sample session");
         backend.openChat();
         QTimer::singleShot(600, &app, [&, output] {
             mainWindow->grabWindow().save(output + "/chat.png");
+            mainWindow->setProperty("page", "timeline");
+        });
+        QTimer::singleShot(1000, &app, [&, output] {
+            mainWindow->grabWindow().save(output + "/timeline.png");
             backend.preview();
         });
-        QTimer::singleShot(1300, &app, [&, output] {
+        QTimer::singleShot(1500, &app, [&, output] {
             menu->grabWindow().save(output + "/hotbox.png");
             backend.release();
         });
-        QTimer::singleShot(1700, &app, [&, output] {
+        QTimer::singleShot(1900, &app, [&, output] {
             QJsonObject result{{"ok", true},
                                {"chat", QFile::exists(output + "/chat.png")},
                                {"hotbox", QFile::exists(output + "/hotbox.png")}};
