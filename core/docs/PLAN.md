@@ -179,3 +179,14 @@ ownership, prompt persistence, scoped memory/RAG/logs, scheduling, reporting and
 bounded orchestrator loop. No Agents menu or runtime service is implemented by the
 planning document. Start with the scoped authoring registry/validators, then the Qt
 builder, and a deterministic local-report fixture before enabling real runners.
+
+
+## Specialist swarms and global definitions — planned extension
+
+The [swarm/catalog plan](SWARM_CATALOG_PLAN.md) extends agent authoring with a
+versioned placement/composition prompt, evidence-based eligibility/fit and task-scoped
+coordination roles. Hotbox process actions will compose bounded specialist workflows.
+Reusable definitions are globally discoverable only under catalog policy; personal
+requests, generations, task outcomes, memory/RAG and logs remain in the runtime
+owner's environment. Implement typed proposal validation and the data partition
+before routing actions to swarms. The prompt template is not wired into live chats.

@@ -18,6 +18,7 @@ the Rust kernel remain separate programs and use separate databases.
 | [Development and tests](DEVELOPMENT.md) | Source map, verification commands, coverage and extension requirements |
 | [Decision record](DECISIONS.md) | Settled design choices, deferred choices and questions still requiring a decision |
 | [Agents category and builder plan](AGENT_BUILDER_PLAN.md) | Contextual + flow, mandatory requirements, skills/tasks, compute, RAG, schedules and reports |
+| [Swarm catalog and placement plan](SWARM_CATALOG_PLAN.md) | Global reusable specialists, placement/roles, bounded teams and personal runtime outcomes |
 | [Implementation plan](PLAN.md) | Ordered increments and acceptance criteria for the remaining work |
 
 For the running desktop app, see the [project README](../../README.md). For code

@@ -275,3 +275,16 @@ manual-only, with no RAG, network or external delivery by default. The planned
 orchestrator admits only verified releases under current grants and backend controls.
 This is a design/implementation plan; no live Agents menu, agent service, VM,
 schedule or RAG integration is enabled by this documentation change.
+
+
+### Planned global specialist catalog and private outcomes
+
+The [swarm/catalog plan](core/docs/SWARM_CATALOG_PLAN.md) adds a proposed
+[placement system prompt](core/templates/prompts/agent-placement-v1.md) to suggest
+category placement, task-scoped coordination roles and evidence-based agent fit.
+Hotbox process actions will compose the needed planners, designers, SQL/roadmap/code,
+image/video, organizing, verifying and reporting specialists under one bounded run.
+Placement/role/fit never grants authority. Global reusable definitions remain separate
+from personal environment requests, generations, task outcomes, memory, RAG and logs.
+These are planning documents and an unconnected prompt template, not live swarm or
+ranking functionality.

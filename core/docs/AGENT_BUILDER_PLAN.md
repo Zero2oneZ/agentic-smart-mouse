@@ -10,7 +10,11 @@ Run/Enable must remain unavailable until their actual prerequisites are verified
 
 The intended experience is **Hotbox → Agents → + → Agent Builder**. Building an
 agent is a versioned, resumable engineering process with mandatory requirements,
-not a generic category with a long prompt. Each approved agent joins the same
+not a generic category with a long prompt. Process-launching actions compose
+bounded specialist teams from a governed global definition catalog, with all actual
+generations and task outcomes in the selected personal environment. See
+[the swarm/catalog extension](SWARM_CATALOG_PLAN.md) and proposed
+[placement prompt](../templates/prompts/agent-placement-v1.md). Each approved agent joins the same
 bounded orchestration loop and is discoverable in a categorized source/file tree.
 
 ## Current implementation and integration points
@@ -87,12 +91,12 @@ a dozen manual dialogs for a simple agent.
 
 | Requirement | Required declaration | Default / activation gate |
 | --- | --- | --- |
-| Identity and purpose | Stable agent ID, owner, purpose, category refs, accountable operator | Private draft; purpose suggestions cannot change scope |
+| Identity and purpose | Stable agent ID, owner, purpose, category refs, accountable operator; proposed coordination role and fit evidence | Private draft; purpose suggestions cannot change scope |
 | Scope and authority | Principal/group/project, who can invoke/edit/administer; requested resource/actions | Minimum explicit grants; current authority checked independently |
 | Task contract | Accepted inputs, outputs, success/failure tests, escalation conditions | One bounded manual task first |
 | Prompt and behavior | Versioned system instructions, model/provider policy, prompt hash, prohibited actions | Template prompt; no authority inferred from prose |
 | Skills and tools | Pinned skill versions, tool schemas, inputs/outputs, capability and licensing requirements | No ambient tool access or floating latest dependencies |
-| Harness and loop | Harness version, workflow, budgets, retries, cancellation, verifier references | Bounded fixture/simulation until a runner is ready |
+| Harness and loop | Harness/recipe version, specialist handoffs, total swarm budgets, retries, cancellation, independent verifiers | Bounded fixture/simulation until a runner is ready |
 | Compute and backpack | Backend, platform, private/pool/dedicated placement, image/rootfs refs, mounts, egress | Private logical instance on a scoped pool; offline where possible |
 | Persistence and recovery | Durable checkpoints, state ownership, ephemeral versus retained data, recovery/backup | SQL checkpoints and scoped artifacts, separate from instance disks |
 | Memory and RAG | Permitted collections, personal/shared policy, ingestion provenance, retrieval/provider budget | No retrieval unless explicitly enabled; local summaries first |
@@ -115,7 +119,8 @@ cannot approve their own grants, select a stronger identity or bypass validators
 
 ```text
 begin_or_resume_draft
-    -> classify_purpose_and_propose_category
+    -> propose_category_coordination_role_and_evidence_based_fit
+    -> compose_minimal_specialist_team_and_personal_output_bindings
     -> resolve_owner_scope_and_review_requested_permissions
     -> define_task_inputs_outputs_and_acceptance
     -> compile_prompt_and_pin_skills
@@ -415,3 +420,13 @@ not a new runtime test run.
 These defaults make the first unit reviewable while preserving the complete
 requirements for more capable agents. They are planning choices, not changes to
 live application settings.
+
+
+## Global catalog and personal execution clarification
+
+Reusable agent/skill/task/prompt/harness/backpack/swarm definitions live in a governed
+global catalog. Actual generations, plans, task outcomes, rendered prompts, memory,
+RAG, logs and checkpoints stay in the selected personal/project environment.
+Placement and task-specific coordination roles are model proposals validated by the
+core; they never confer permissions. See [Swarm catalog plan](SWARM_CATALOG_PLAN.md)
+for the system prompt contract, specialist composition and revised acceptance tests.
