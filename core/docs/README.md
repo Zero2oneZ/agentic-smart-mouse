@@ -15,6 +15,7 @@ general leased agent dispatch or independent acceptance.
 | [Generated build API](BUILD_LEDGER_REFERENCE.md) | Shared catalog operations, fields, enums and checked source/test references |
 | [Build ledger API](BUILD_LEDGER_API.md) | Implemented SQL roadmap, versioned documents, scoped evidence and checkpoint/subtree forks |
 | [Build roadmap](BUILD_ROADMAP.md) | Ordered delivery stages, dependencies, runtime/data ownership and acceptance gates |
+| [Ollama review team](OLLAMA_REVIEW_TEAM.md) | Prepared review roles, connection requirements and proposal-only boundaries |
 | [Planned build swarm](PLANNED_SWARM_AGENTS.md) | Nine disabled/planned roles, capability boundaries, handoffs and parent-budget rules |
 | [Whole-product release review](../../docs/PRODUCT_REVIEW.md) | Consolidated user-facing priorities, clean UI, deterministic setup and supervised background work |
 | [Connected local tasks](LOCAL_TASKS.md) | Notes-to-brief UI, durable checkpoints, private results, controls and CLI operations |
