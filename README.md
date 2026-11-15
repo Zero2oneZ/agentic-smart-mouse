@@ -67,7 +67,7 @@ Enter exact relative file paths, one per line. Checkpointing commits only those 
 
 Enable **Checkpoint selected files every minute** to persist that policy. Enable push only after selecting an existing named remote, such as `origin`. Push targets only that managed branch, uses existing Git authentication without prompting, and never force-pushes. Failures are recorded and pause automatic Git until you explicitly resume it. Hotbox does not merge, rebase, clean, reset, delete branches, or prune worktrees in the background. Checkpoints also record Git status, tracked file tree, recent commit timestamps, and the resulting commit ID. Raw sessions and conversation databases stay local.
 
-No remote is configured for the Hotbox development repository yet; external pushing remains disabled. A remote URL and credentials are needed before that can be enabled.
+The Hotbox development repository has `origin` configured as `git@github.com:Zero2oneZ/agentic-smart-mouse.git`. Initial publication is pending GitHub authentication on the development machine. Background push remains opt-in per managed workspace.
 
 ## Session commands
 
