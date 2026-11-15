@@ -10,3 +10,6 @@ RESOURCES += src/resources.qrc
 
 HEADERS += src/sessionledger.h src/gitworkspace.h
 SOURCES += src/sessionledger.cpp src/gitworkspace.cpp
+
+HEADERS += src/segmentstore.h
+SOURCES += src/segmentstore.cpp

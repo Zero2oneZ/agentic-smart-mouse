@@ -1,4 +1,5 @@
 #pragma once
+#include "segmentstore.h"
 #include "sessionledger.h"
 #include <QFutureWatcher>
 #include <QJsonArray>
@@ -16,6 +17,8 @@ class Backend : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantList categories READ categories NOTIFY changed)
     Q_PROPERTY(QVariantList messages READ messages NOTIFY changed)
+    Q_PROPERTY(QVariantList segments READ segments NOTIFY activityChanged)
+    Q_PROPERTY(bool segmentAuto READ segmentAuto WRITE setSegmentAuto NOTIFY activityChanged)
     Q_PROPERTY(QVariantList timeline READ timeline NOTIFY activityChanged)
     Q_PROPERTY(QVariantMap gitState READ gitState NOTIFY activityChanged)
     Q_PROPERTY(bool taskBusy READ taskBusy NOTIFY activityChanged)
@@ -66,6 +69,13 @@ class Backend : public QObject {
     Q_INVOKABLE void clearStatus();
     void setStatus(const QString &text);
     QVariantList timeline() const;
+    QVariantList segments() const;
+    bool segmentAuto() const;
+    Q_INVOKABLE void setSegmentAuto(bool enabled);
+    Q_INVOKABLE QVariantList segmentPage(const QString &state = QString(""),
+                                         const QString &query = QString(""), qint64 before = 0) const;
+    Q_INVOKABLE QVariantMap segmentAction(const QString &action,
+                                          const QVariantMap &arguments = QVariantMap());
     QVariantMap gitState() const;
     bool taskBusy() const { return m_gitInFlight; }
     QVariantMap lastGitResult() const { return m_lastGitResult; }
@@ -108,6 +118,8 @@ class Backend : public QObject {
     QJsonArray toolDefinitions() const;
     void gitTask(const QString &operation, int category);
     std::unique_ptr<SessionLedger> m_ledger;
+    std::unique_ptr<SegmentStore> m_segments;
+    QTimer m_segmentPoll;
     QFutureWatcher<QVariantMap> m_gitTask;
     QTimer m_background, m_activityPoll;
     qint64 m_dataVersion = -1;

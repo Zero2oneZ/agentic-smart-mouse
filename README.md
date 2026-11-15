@@ -20,7 +20,7 @@ The development machine uses a user-local install: executable in `~/.local/bin/h
 
 ## Verification
 
-Fourteen Qt Test checks pass. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, and context-tool round trips. Offscreen screenshots use sample content. The live overlay rendered successfully; global shortcut verification did not pass. Keep desktop keyboard injection out of further automated checks.
+Eighteen Qt Test checks cover the application. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, and context-tool round trips. Offscreen screenshots use sample content. The live overlay rendered successfully; global shortcut verification did not pass. Keep desktop keyboard injection out of further automated checks.
 
 ## Model connection
 
@@ -87,3 +87,46 @@ hotbox sync --category 2 --json
 ```
 
 `run` executes only the program and arguments you explicitly supply, in that category's folder. It captures bounded output, working directory, exit status, start/end events, and elapsed time, with a two-minute timeout. It is not a global shell recorder. Existing external sessions can be attached explicitly; Hotbox does not crawl other applications' histories. Background Git runs while the resident app is running. External CLI changes are reflected in the app within about two seconds.
+
+## Reusable session segments
+
+![Reusable session segments](docs/segments.png)
+
+Open **Reusable segments** to organize work into discoverable units. Each `seg_<uuid>` has a kind (`web_search`, `code`, `analysis`, `chat`, or another simple label), title, description, summary, workspace, timestamps, and state. Its ordered `part_<uuid>` artifacts retain input, output, scripts, sources, history, notes, and derived results separately. Text artifacts have SHA-256 fingerprints of the redacted stored text; event-reference artifacts point to the original ledger event. Original source files are never changed.
+
+The lifecycle is `collecting → ready → processing → complete`, with `failed → ready` for explicit retries. Add artifacts while collecting, then **Make ready** to seal the evidence. A worker claims a ready job with an exclusive lease; expired leases can be reclaimed after a crash. Completion requires the current unexpired lease and stores a derived result, description, and summary without replacing the originals. Failed attempts retain diagnostic artifacts. Initial descriptions and completed summaries are recorded as revisions.
+
+**Process next ready** runs `builtin.extractive-v1`, a deterministic local processor. It collects bounded text excerpts and linked summaries into a result manifest. This is extractive indexing, not AI interpretation or a web-search agent. Optional **Auto-process** applies it every five seconds while Hotbox runs; it is off by default so external workers can claim waiting jobs. Stored scripts are inert evidence and are never executed by this processor.
+
+**Segment this chat** references up to the most recent 100 timeline entries, selecting this workspace's chat messages. Long-form messages remain available through the event references. For longer sessions, create multiple continuation segments or attach exported text artifacts explicitly. Each text artifact is limited to 1 MiB and is rejected, rather than silently truncated, when larger. Artifact reads are paged in 6,000-character chunks.
+
+Use `uses`, `derived_from`, and `continues` links to assemble context. **Compose bundle** creates a segment holding component references, rather than duplicating source transcripts. Ready and process the bundle to capture a summary of those components. Summaries describe the evidence available when processing occurred. Later work belongs in a new linked continuation. Segment descriptions and summaries are searchable; full-text artifacts are fetched only when needed.
+
+Master chat can discover segments across all workspaces. Focused chats inherit references to at most five recent segments and can read those specifically granted segments, including their evidence; they cannot mutate inherited parent segments. Model tools `find_segments`, `read_segment`, and `read_segment_part` retrieve summary metadata or selected originals within scope. Model tools do not claim jobs or execute stored scripts. A model connection is still required for AI interpretation.
+
+### Worker protocol
+
+All commands emit JSON and use the same local SQLite database as the app. External workers can be ordinary programs using this protocol; Hotbox does not require a continuously running AI process.
+
+```sh
+hotbox segment create --category 2 --kind web_search --title "Rendering options" --description "Compare native rendering approaches"
+hotbox segment add --category 2 --id SEGMENT_ID --kind input --content "Research question"
+hotbox segment add --category 2 --id SEGMENT_ID --kind history --content-file ./search-history.jsonl
+hotbox segment add --category 2 --id SEGMENT_ID --kind script --content-file ./analyze.py
+hotbox segment add --category 2 --id SEGMENT_ID --kind source --source https://example.org/reference --content "Relevant source excerpt"
+hotbox segment add --category 2 --id SEGMENT_ID --kind output --content-file ./findings.json
+hotbox segment ready --category 2 --id SEGMENT_ID
+hotbox segment claim --category 2 --worker research-processor --seconds 300
+hotbox segment read --category 2 --id SEGMENT_ID
+hotbox segment part --category 2 --id PART_ID --offset 0
+hotbox segment renew --category 2 --id SEGMENT_ID --lease LEASE_TOKEN --seconds 300
+hotbox segment finish --category 2 --id SEGMENT_ID --lease LEASE_TOKEN --description "Rendering comparison" --summary "Prefer native Qt for this app" --content-file ./derived-result.json
+hotbox segment list --category 1 --state complete --query rendering
+hotbox segment compose --category 2 --title "Implementation context" --ids FIRST_SEGMENT_ID,SECOND_SEGMENT_ID
+```
+
+Use IDs returned by `create`, `add`, and `claim`. The claim response includes the lease token and expiry; normal readers do not receive the token. Leases last 1–3,600 seconds (default 300). Claiming with master category 1 considers all non-archived workspaces; a focused category only claims its own descendants, not inherited segments. `segment fail --id ID --lease TOKEN --error TEXT` records a failure, and `segment retry --id ID` requeues it. Keep the same `--category` throughout a worker's operations.
+
+To reuse command I/O already captured by `hotbox run`, attach the returned event with `segment add --category ID --id SEGMENT_ID --kind history --event EVENT_ID`. `segment from_chat --category ID --title "Chat checkpoint"` captures chat references; `segment process --category ID` processes the next ready segment locally. List results are newest first and accept `--before SEQUENCE` for pagination.
+
+Everything remains local unless you explicitly export it. No external database connector or live web-search worker is configured by this feature. Common credential patterns are redacted before storing new artifacts; this is not a complete secret detector. Session artifacts and summaries remain outside pushed Git branches.

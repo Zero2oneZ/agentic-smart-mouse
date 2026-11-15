@@ -46,6 +46,19 @@ Backend::Backend(const QString &directory, QObject *parent) : QObject(parent) {
         "folder TEXT NOT NULL, branch TEXT NOT NULL, paths TEXT NOT NULL DEFAULT '', remote TEXT NOT NULL "
         "DEFAULT '', automatic INTEGER NOT NULL DEFAULT 0, push INTEGER NOT NULL DEFAULT 0)");
     m_ledger = std::make_unique<SessionLedger>(m_db);
+    m_segments = std::make_unique<SegmentStore>(m_db, *m_ledger);
+    m_segmentPoll.setInterval(5000);
+    connect(&m_segmentPoll, &QTimer::timeout, this, [this] {
+        if (segmentAuto()) {
+            auto result = m_segments->process(1);
+            if (!result.value("empty").toBool()) {
+                emit activityChanged();
+                if (result.contains("error"))
+                    setStatus(result["error"].toString());
+            }
+        }
+    });
+    m_segmentPoll.start();
     connect(&m_gitTask, &QFutureWatcher<QVariantMap>::finished, this, [this] {
         auto result = m_gitTask.result();
         m_lastGitResult = result;
@@ -138,6 +151,8 @@ Backend::~Backend() {
     m_background.stop();
     m_activityPoll.stop();
     m_gitTask.waitForFinished();
+    m_segmentPoll.stop();
+    m_segments.reset();
     m_ledger.reset();
     m_db.close();
     m_db = QSqlDatabase();
@@ -643,11 +658,20 @@ int Backend::focusWorkspace(int category, const QString &name, const QString &ha
         brief +=
             QString("#%1 %2 %3\n").arg(e["id"].toString(), e["created"].toString(), e["summary"].toString());
     }
+    const auto segmentRefs = m_segments->list(category, QString(), QString(), 0, 5);
+    brief += "Reusable segment references:\n";
+    for (const auto &value : segmentRefs) {
+        auto segment = value.toMap();
+        brief += segment["id"].toString() + " " + segment["title"].toString() + ": " +
+                 segment["summary"].toString().left(180) + "\n";
+    }
     int id = addCategory(name, field(category, "folder"), brief.left(6000), category);
     if (id > 0) {
         recordEvent(id, "focus.handoff", tr("Focused from %1").arg(field(category, "name")), brief);
         for (const auto &value : references)
             m_ledger->grant(id, value.toMap()["id"].toLongLong());
+        for (const auto &value : segmentRefs)
+            m_segments->grant(id, value.toMap()["id"].toString());
     }
     return id;
 }
@@ -772,6 +796,12 @@ QJsonArray Backend::requestContext() const {
                       .arg(e["id"].toString(), e["category"].toString(), e["created"].toString(),
                            e["kind"].toString(), e["summary"].toString());
     }
+    system += "\nReusable segments (index only; use find_segments, read_segment, read_segment_part):";
+    for (const auto &value : m_segments->list(m_current, QString(), QString(), 0, 6)) {
+        auto segment = value.toMap();
+        system += "\n" + segment["id"].toString() + " " + segment["state"].toString() + " " +
+                  segment["title"].toString() + ": " + segment["summary"].toString().left(180);
+    }
     QJsonArray context{
         QJsonObject{{"role", "system"}, {"content", SessionLedger::redact(system).left(18000)}}};
     auto history = messages();
@@ -804,6 +834,18 @@ QJsonArray Backend::toolDefinitions() const {
     };
     QJsonObject integer{{"type", "integer"}}, text{{"type", "string"}};
     return {
+        make("find_segments",
+             "Find reusable segments by state, words, or ID. Results contain summaries only; before=0 starts "
+             "newest.",
+             {{"state", text}, {"query", text}, {"before", integer}}, {"state", "query", "before"}),
+        make("read_segment",
+             "Read a segment description, summary, and artifact IDs, preserving small context. Read original "
+             "evidence separately. Start offset=0 and follow nextArtifactOffset to page artifact IDs.",
+             {{"id", text}, {"offset", integer}}, {"id", "offset"}),
+        make("read_segment_part",
+             "Read paged original input, output, history, script, source, or derived result by artifact ID. "
+             "Follow nextOffset.",
+             {{"id", text}, {"offset", integer}}, {"id", "offset"}),
         make("workspace_overview",
              "Get a workspace brief and paged event summaries. Master can inspect all workspaces; focused "
              "chats can inspect descendants. before=0 starts with newest events.",
@@ -819,6 +861,56 @@ QJsonArray Backend::toolDefinitions() const {
 QVariantMap Backend::contextTool(const QString &name, const QVariantMap &a, int scope) {
     if (scope == 0)
         scope = m_current;
+    if (name == "find_segments") {
+        auto rows = m_segments->list(scope, a.value("state").toString(), a.value("query").toString(),
+                                     a.value("before").toLongLong(), 8);
+        QVariantList compact;
+        for (const auto &value : rows) {
+            auto row = value.toMap();
+            row["description"] = row["description"].toString().left(200);
+            row["summary"] = row["summary"].toString().left(400);
+            compact.append(row);
+        }
+        return {{"segments", compact}};
+    }
+    if (name == "read_segment") {
+        auto result = m_segments->read(scope, a.value("id").toString());
+        if (result.contains("error"))
+            return result;
+        auto parts = result["artifacts"].toList();
+        int offset = qBound(0, a.value("offset").toInt(), int(parts.size()));
+        QVariantList page;
+        for (const auto &value : parts.mid(offset, 8)) {
+            auto part = value.toMap();
+            part["source"] = part["source"].toString().left(100);
+            page.append(part);
+        }
+        result["artifactCount"] = parts.size();
+        result["artifacts"] = page;
+        result["artifactOffset"] = offset;
+        result["nextArtifactOffset"] = offset + 8 < parts.size() ? offset + 8 : -1;
+        result.remove("revisions");
+        result["links"] = result["links"].toList().mid(0, 8);
+        result["summary"] = result["summary"].toString().left(2000);
+        result["description"] = result["description"].toString().left(500);
+        return result;
+    }
+    if (name == "read_segment_part") {
+        auto result = m_segments->artifact(scope, a.value("id").toString(), a.value("offset").toInt());
+        if (result.contains("error"))
+            return result;
+        result["source"] = result["source"].toString().left(500);
+        while (QString::fromUtf8(
+                   QJsonDocument(QJsonObject::fromVariantMap(result)).toJson(QJsonDocument::Compact))
+                       .size() > 7000 &&
+               result["content"].toString().size() > 256) {
+            QString content = result["content"].toString();
+            content = content.left(content.size() / 2);
+            result["content"] = content;
+            result["nextOffset"] = result["offset"].toInt() + content.size();
+        }
+        return result;
+    }
     if (name == "read_event")
         return m_ledger->read(scope, a.value("id").toLongLong(), a.value("offset").toInt());
     int id = a.value("category").toInt();
@@ -876,4 +968,81 @@ void Backend::processBackgroundGit() {
         ids << q.value(0).toInt();
     if (!ids.isEmpty())
         gitTask("checkpoint", ids[m_backgroundNext++ % ids.size()]);
+}
+
+QVariantList Backend::segments() const { return segmentPage(); }
+QVariantList Backend::segmentPage(const QString &state, const QString &query, qint64 before) const {
+    return m_segments ? m_segments->list(m_current, state, query, before) : QVariantList{};
+}
+bool Backend::segmentAuto() const { return setting("segments_auto", "0") == "1"; }
+void Backend::setSegmentAuto(bool enabled) {
+    execute("INSERT INTO settings(name,value) VALUES('segments_auto',?) ON CONFLICT(name) DO UPDATE SET "
+            "value=excluded.value",
+            {enabled ? "1" : "0"});
+    emit activityChanged();
+}
+QVariantMap Backend::segmentAction(const QString &action, const QVariantMap &a) {
+    if (!m_segments)
+        return {{"error", "Segment database is unavailable"}};
+    QString id = a.value("id").toString(), token = a.value("lease").toString();
+    QVariantMap result;
+    if (action == "create")
+        result = m_segments->create(m_current, m_current, a.value("kind", "web_search").toString(),
+                                    a.value("title").toString(), a.value("description").toString());
+    else if (action == "add")
+        result = m_segments->add(m_current, id, a.value("kind", "output").toString(),
+                                 a.value("content").toString(), a.value("source").toString(),
+                                 a.value("event").toLongLong());
+    else if (action == "read")
+        return m_segments->read(m_current, id);
+    else if (action == "part")
+        return m_segments->artifact(m_current, id, a.value("offset").toInt());
+    else if (action == "ready")
+        result = m_segments->ready(m_current, id);
+    else if (action == "claim")
+        result = m_segments->claim(m_current, a.value("worker").toString(), a.value("seconds", 300).toInt());
+    else if (action == "renew")
+        result = m_segments->renew(m_current, id, token, a.value("seconds", 300).toInt());
+    else if (action == "finish")
+        result = m_segments->finish(m_current, id, token, a.value("description").toString(),
+                                    a.value("summary").toString(), a.value("content").toString());
+    else if (action == "fail")
+        result = m_segments->fail(m_current, id, token, a.value("error").toString());
+    else if (action == "retry")
+        result = m_segments->retry(m_current, id);
+    else if (action == "link")
+        result = m_segments->link(m_current, id, a.value("target").toString(),
+                                  a.value("relation", "uses").toString());
+    else if (action == "compose")
+        result = m_segments->compose(m_current, m_current, a.value("title").toString(),
+                                     a.value("ids").toStringList());
+    else if (action == "process")
+        result = m_segments->process(m_current);
+    else if (action == "from_chat") {
+        result = m_segments->create(m_current, m_current, "chat",
+                                    a.value("title", title() + " chat segment").toString(),
+                                    a.value("description", brief()).toString().left(4000));
+        if (result.contains("error"))
+            return result;
+        QString segment = result["id"].toString();
+        const auto recent = m_ledger->timeline(m_current, 0, 100);
+        for (auto it = recent.crbegin(); it != recent.crend(); ++it) {
+            auto event = it->toMap();
+            if (event["category"].toInt() != m_current || !event["kind"].toString().startsWith("chat."))
+                continue;
+            auto added = m_segments->add(m_current, segment, "history", "event:" + event["id"].toString(),
+                                         event["source"].toString(), event["id"].toLongLong());
+            if (added.contains("error")) {
+                result = added;
+                break;
+            }
+        }
+        if (!result.contains("error"))
+            result = m_segments->read(m_current, segment);
+    } else
+        result = {{"error", "Unknown segment action"}};
+    if (result.contains("error"))
+        setStatus(result["error"].toString());
+    emit activityChanged();
+    return result;
 }

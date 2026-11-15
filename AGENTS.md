@@ -17,3 +17,8 @@ chat supports scoped event lookup and focused handoffs, but cannot edit files,
 execute commands, or push Git. Git worker tests must use temporary repositories
 and local bare remotes. Background checkpoints apply only to managed worktrees
 and explicitly selected files; keep session data outside every pushed branch.
+
+Reusable segments retain original redacted text artifacts separately from derived
+results and summaries. Never execute stored scripts automatically. Queue workers
+must use valid, unexpired leases to finish or fail jobs. Preserve workspace
+scoping and explicit segment grants when retrieving or composing context.

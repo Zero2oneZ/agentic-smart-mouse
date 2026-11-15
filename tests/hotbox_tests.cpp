@@ -399,6 +399,157 @@ class HotboxTests : public QObject {
         b.select(origin);
         QCOMPARE(b.messages().last().toMap()["content"].toString(), QString("Read the project events."));
     }
+    void segmentEvidenceQueueAndWorkerCompletion() {
+        QTemporaryDir dir;
+        Backend b(dir.path());
+        auto segment = b.segmentAction("create", {{"kind", "web_search"},
+                                                  {"title", "Rendering research"},
+                                                  {"description", "Compare native rendering options"}});
+        QVERIFY2(!segment.contains("error"), qPrintable(segment["error"].toString()));
+        QString id = segment["id"].toString();
+        QVERIFY(id.startsWith("seg_"));
+        QString body = QString(18000, 'x') + "\nA final finding.";
+        auto input =
+            b.segmentAction("add", {{"id", id}, {"kind", "input"}, {"content", "Find rendering options"}});
+        auto output = b.segmentAction("add", {{"id", id},
+                                              {"kind", "output"},
+                                              {"content", body},
+                                              {"source", "https://example.invalid/research"}});
+        auto script =
+            b.segmentAction("add", {{"id", id}, {"kind", "script"}, {"content", "print('analysis')\n"}});
+        QVERIFY(!input.contains("error"));
+        QVERIFY(!output.contains("error"));
+        QVERIFY(!script.contains("error"));
+        QCOMPARE(output["sha256"].toString().size(), 64);
+        QCOMPARE(b.segmentAction("ready", {{"id", id}})["state"].toString(), QString("ready"));
+        QVERIFY(b.segmentAction("add", {{"id", id}, {"kind", "output"}, {"content", "overwrite"}})
+                    .contains("error"));
+        auto job = b.segmentAction("claim", {{"worker", "cold-code-test"}, {"seconds", 60}});
+        QCOMPARE(job["id"].toString(), id);
+        QVERIFY(job["lease"].toString().startsWith("lease_"));
+        Backend competing(dir.path());
+        QVERIFY(competing.segmentAction("claim", {{"worker", "second-worker"}})["empty"].toBool());
+        QVERIFY(b.segmentAction(
+                     "finish",
+                     {{"id", id}, {"lease", "wrong"}, {"description", "Description"}, {"summary", "Summary"}})
+                    .contains("error"));
+        QVERIFY(!b.segmentAction("renew", {{"id", id}, {"lease", job["lease"]}, {"seconds", 120}})
+                     .contains("error"));
+        auto complete = b.segmentAction("finish", {{"id", id},
+                                                   {"lease", job["lease"]},
+                                                   {"description", "Rendering comparison"},
+                                                   {"summary", "Use native Qt rendering."},
+                                                   {"content", "{\"choice\":\"Qt\"}"}});
+        QCOMPARE(complete["state"].toString(), QString("complete"));
+        QCOMPARE(complete["artifacts"].toList().size(), 4);
+        QCOMPARE(complete["revisions"].toList().size(), 2);
+        QVERIFY(
+            b.segmentAction("finish",
+                            {{"id", id}, {"lease", job["lease"]}, {"description", "Bad"}, {"summary", "Bad"}})
+                .contains("error"));
+        QString reconstructed;
+        int offset = 0;
+        do {
+            auto part = b.segmentAction("part", {{"id", output["id"]}, {"offset", offset}});
+            QVERIFY(!part.contains("error"));
+            reconstructed += part["content"].toString();
+            offset = part["nextOffset"].toInt();
+        } while (offset >= 0);
+        QCOMPARE(reconstructed, body);
+        QString throughTool;
+        int toolOffset = 0;
+        do {
+            auto part = b.contextTool("read_segment_part", {{"id", output["id"]}, {"offset", toolOffset}});
+            throughTool += part["content"].toString();
+            toolOffset = part["nextOffset"].toInt();
+        } while (toolOffset >= 0);
+        QCOMPARE(throughTool, body);
+        auto index = b.contextTool("read_segment", {{"id", id}, {"offset", 0}});
+        QCOMPARE(index["artifacts"].toList().size(), 4);
+        QCOMPARE(index["nextArtifactOffset"].toInt(), -1);
+
+        auto matches = b.segmentPage("complete", "rendering");
+        QCOMPARE(matches.size(), 1);
+        QVERIFY(!matches.first().toMap().contains("artifacts"));
+    }
+    void segmentRetryExpiredLeaseAndImmutableOriginals() {
+        QTemporaryDir dir;
+        Backend b(dir.path());
+        auto s = b.segmentAction("create", {{"kind", "code"}, {"title", "A task"}});
+        QString id = s["id"].toString();
+        auto original = b.segmentAction(
+            "add", {{"id", id}, {"kind", "output"}, {"content", "password=private\nOriginal evidence"}});
+        QVERIFY(!original.contains("error"));
+        b.segmentAction("ready", {{"id", id}});
+        auto first = b.segmentAction("claim", {{"worker", "first"}, {"seconds", 1}});
+        QTest::qWait(1200);
+        auto second = b.segmentAction("claim", {{"worker", "recovered"}});
+        QCOMPARE(second["id"].toString(), id);
+        QVERIFY(first["lease"] != second["lease"]);
+        QCOMPARE(second["attempts"].toInt(), 2);
+        QVERIFY(b.segmentAction("fail", {{"id", id}, {"lease", first["lease"]}, {"error", "Stale worker"}})
+                    .contains("error"));
+        QCOMPARE(b.segmentAction("fail", {{"id", id},
+                                          {"lease", second["lease"]},
+                                          {"error", "Worker failed with diagnostic details"}})["state"]
+                     .toString(),
+                 QString("failed"));
+        QCOMPARE(b.segmentAction("retry", {{"id", id}})["state"].toString(), QString("ready"));
+        auto done = b.segmentAction("process", {});
+        QCOMPARE(done["state"].toString(), QString("complete"));
+        QVERIFY(done["summary"].toString().contains("Original evidence"));
+        auto part = b.segmentAction("part", {{"id", original["id"]}});
+        QVERIFY(part["content"].toString().contains("[REDACTED]"));
+        QVERIFY(!part["content"].toString().contains("private"));
+        Backend reopened(dir.path());
+        QCOMPARE(reopened.segmentAction("read", {{"id", id}})["state"].toString(), QString("complete"));
+    }
+    void segmentCompositionScopeAndFocusedReferences() {
+        QTemporaryDir dir;
+        Backend b(dir.path());
+        int project = b.addCategory("Project", "/tmp/project", "Research"),
+            other = b.addCategory("Other", "/tmp/other", "Other context");
+        auto hidden = b.segmentAction("create", {{"kind", "analysis"}, {"title", "Other workspace"}});
+        b.select(project);
+        b.send("Remember this original chat");
+        auto fromChat = b.segmentAction("from_chat", {{"title", "Chat evidence"}});
+        QString id = fromChat["id"].toString();
+        QCOMPARE(fromChat["artifacts"].toList().size(), 1);
+        QVERIFY(b.segmentAction("read", {{"id", hidden["id"]}}).contains("error"));
+        b.segmentAction("ready", {{"id", id}});
+        auto processed = b.segmentAction("process");
+        QCOMPARE(processed["state"].toString(), QString("complete"));
+        auto bundle = b.segmentAction("compose", {{"title", "Research bundle"}, {"ids", QStringList{id}}});
+        QCOMPARE(bundle["links"].toList().size(), 1);
+        QCOMPARE(bundle["artifacts"].toList().size(), 0);
+        b.segmentAction("ready", {{"id", bundle["id"]}});
+        auto combined = b.segmentAction("process");
+        QVERIFY(combined["summary"].toString().contains(id));
+        int focused = b.focusWorkspace(project, "Focused reader", "Use the research");
+        QVERIFY(focused > other);
+        QVERIFY(b.brief().contains(id));
+        auto allowed = b.segmentAction("read", {{"id", id}});
+        QVERIFY(!allowed.contains("error"));
+        auto part = b.segmentAction("part", {{"id", allowed["artifacts"].toList().first().toMap()["id"]}});
+        QVERIFY(part["content"].toString().contains("Remember this original chat"));
+        QVERIFY(b.segmentAction("read", {{"id", hidden["id"]}}).contains("error"));
+        QVERIFY(b.segmentAction("add", {{"id", id}, {"kind", "notes"}, {"content", "Bad mutation"}})
+                    .contains("error"));
+        auto tool = b.contextTool("find_segments", {{"state", "complete"}, {"query", "Chat evidence"}});
+        QCOMPARE(tool["segments"].toList().size(), 2);
+        QVERIFY(b.contextTool("read_segment", {{"id", hidden["id"]}}).contains("error"));
+    }
+    void segmentRejectsOversizeWithoutTruncation() {
+        QTemporaryDir dir;
+        Backend b(dir.path());
+        auto s = b.segmentAction("create", {{"kind", "experiment"}, {"title", "Evidence limits"}});
+        QString id = s["id"].toString();
+        QVERIFY(b.segmentAction("add",
+                                {{"id", id}, {"kind", "output"}, {"content", QString(1024 * 1024 + 1, 'x')}})
+                    .contains("error"));
+        QCOMPARE(b.segmentAction("read", {{"id", id}})["artifacts"].toList().size(), 0);
+        QVERIFY(b.segmentAction("ready", {{"id", id}}).contains("error"));
+    }
     void qmlLoadsAndCenterOpensMaster() {
         QTemporaryDir dir;
         Backend b(dir.path());

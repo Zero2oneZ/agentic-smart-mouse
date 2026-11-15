@@ -45,7 +45,8 @@ int main(int argc, char **argv) {
     const QString commandName = raw.value(0, "open");
     const bool headless = QStringList{"events",   "read-event", "attach", "record",     "focus",
                                       "snapshot", "branch",     "sync",   "git-config", "run"}
-                              .contains(commandName);
+                              .contains(commandName) ||
+                          commandName == "segment";
     if (check || smoke || headless) {
         qputenv("QT_QPA_PLATFORM", "offscreen");
         qputenv("QT_QPA_PLATFORMTHEME", "");
@@ -54,7 +55,7 @@ int main(int argc, char **argv) {
         qputenv("QT_QUICK_BACKEND", "software");
     QGuiApplication app(argc, argv);
     app.setApplicationName("hotbox");
-    app.setApplicationVersion("0.2.0");
+    app.setApplicationVersion("0.3.0");
     app.setDesktopFileName("hotbox");
     app.setQuitOnLastWindowClosed(false);
     app.setWindowIcon(QIcon::fromTheme("hotbox"));
@@ -103,7 +104,63 @@ int main(int argc, char **argv) {
         }
         QJsonObject result;
         int exitCode = 0;
-        if (command == "events")
+        if (command == "segment") {
+            QString action = "list";
+            for (int i = 1; i < options.size(); ++i) {
+                if (options[i].startsWith("--")) {
+                    if (options[i] != "--json")
+                        ++i;
+                    continue;
+                }
+                action = options[i];
+                break;
+            }
+            if (action == "list")
+                result = {{"segments", QJsonArray::fromVariantList(backend.segmentPage(
+                                           option("--state", QString("")), option("--query", QString("")),
+                                           option("--before", "0").toLongLong()))}};
+            else {
+                QVariantMap arguments;
+                for (const auto &key :
+                     QStringList{"id", "kind", "title", "description", "summary", "source", "content",
+                                 "worker", "lease", "target", "relation", "error"})
+                    if (options.contains("--" + key))
+                        arguments[key] = option("--" + key);
+                for (const auto &key : QStringList{"offset", "seconds", "event"})
+                    if (options.contains("--" + key)) {
+                        bool ok;
+                        auto number = option("--" + key).toLongLong(&ok);
+                        if (!ok) {
+                            QTextStream(stderr) << "Invalid numeric option: " << key << '\n';
+                            return 2;
+                        }
+                        arguments[key] = number;
+                    }
+                if (options.contains("--ids"))
+                    arguments["ids"] = option("--ids").split(',', Qt::SkipEmptyParts);
+                if (options.contains("--content-file")) {
+                    QString path = option("--content-file");
+                    if (path.startsWith("~/"))
+                        path = QDir::homePath() + path.mid(1);
+                    QFileInfo info(path);
+                    QFile file(path);
+                    if (!info.isFile() || SessionLedger::privatePath(info.canonicalFilePath()) ||
+                        info.size() > 1024 * 1024 || !file.open(QIODevice::ReadOnly)) {
+                        QTextStream(stderr)
+                            << "Choose a text artifact up to 1 MiB outside credential locations\n";
+                        return 2;
+                    }
+                    QByteArray data = file.readAll();
+                    if (data.contains('\0')) {
+                        QTextStream(stderr) << "Artifact must be text\n";
+                        return 2;
+                    }
+                    arguments["content"] = QString::fromUtf8(data);
+                    arguments["source"] = info.canonicalFilePath();
+                }
+                result = QJsonObject::fromVariantMap(backend.segmentAction(action, arguments));
+            }
+        } else if (command == "events")
             result = {{"events", QJsonArray::fromVariantList(
                                      backend.eventPage(category, option("--before", "0").toLongLong()))}};
         else if (command == "read-event")
@@ -351,20 +408,46 @@ int main(int argc, char **argv) {
             backend.currentId(), "command.finished", "Sample build passed",
             "Command: make -j4\nWorking directory: /tmp/weather\nExit code: 0\nAll checks passed.",
             "sample session");
+        auto sample = backend.segmentAction(
+            "create", {{"kind", "web_search"},
+                       {"title", "Desktop rendering research"},
+                       {"description", "Sample research capsule for the interface preview"}});
+        QString sampleId = sample["id"].toString();
+        backend.segmentAction("add", {{"id", sampleId},
+                                      {"kind", "input"},
+                                      {"content", "Compare native and web-based desktop interfaces."}});
+        backend.segmentAction(
+            "add",
+            {{"id", sampleId},
+             {"kind", "output"},
+             {"source", "https://example.invalid/sample-notes"},
+             {"content", "Sample finding: compare native rendering and web views for desktop integration."}});
+        backend.segmentAction(
+            "add",
+            {{"id", sampleId}, {"kind", "script"}, {"content", "print('summarize saved findings')\n"}});
+        backend.segmentAction("ready", {{"id", sampleId}});
+        backend.segmentAction("process");
         backend.openChat();
         QTimer::singleShot(600, &app, [&, output] {
             mainWindow->grabWindow().save(output + "/chat.png");
             mainWindow->setProperty("page", "timeline");
         });
-        QTimer::singleShot(1000, &app, [&, output] {
+        QTimer::singleShot(1000, &app, [&, output, sampleId] {
             mainWindow->grabWindow().save(output + "/timeline.png");
+            mainWindow->setProperty("page", "segments");
+            auto view = mainWindow->findChild<QObject *>("segmentsView");
+            if (view)
+                view->setProperty("selected", backend.segmentAction("read", {{"id", sampleId}}));
+        });
+        QTimer::singleShot(1600, &app, [&, output] {
+            mainWindow->grabWindow().save(output + "/segments.png");
             backend.preview();
         });
-        QTimer::singleShot(1500, &app, [&, output] {
+        QTimer::singleShot(2200, &app, [&, output] {
             menu->grabWindow().save(output + "/hotbox.png");
             backend.release();
         });
-        QTimer::singleShot(1900, &app, [&, output] {
+        QTimer::singleShot(2600, &app, [&, output] {
             QJsonObject result{{"ok", true},
                                {"chat", QFile::exists(output + "/chat.png")},
                                {"hotbox", QFile::exists(output + "/hotbox.png")}};

@@ -49,4 +49,18 @@ with tempfile.TemporaryDirectory(prefix="hotbox-cli-") as temp:
     call("attach", "--category", category, "--path", str(session))
     assert len(call("events", "--category", "1")["events"]) >= 7
     call("git-config", "--category", "999", "--paths", "app.txt", expected=2)
-print("CLI workflow passed: focus, command capture, event read, snapshots, branch, settings, checkpoint, attachment, master timeline.")
+    segment = call("segment", "create", "--category", category, "--kind", "web_search", "--title", "Rendering research", "--description", "Compare rendering options")
+    segment_id = segment["id"]
+    original = call("segment", "add", "--category", category, "--id", segment_id, "--kind", "output", "--content", "Qt fits the native desktop.")
+    call("segment", "add", "--category", category, "--id", segment_id, "--kind", "history", "--event", str(event))
+    call("segment", "ready", "--category", category, "--id", segment_id)
+    job = call("segment", "claim", "--category", category, "--worker", "cli-smoke")
+    assert job["id"] == segment_id and job["lease"]
+    finished = call("segment", "finish", "--category", category, "--id", segment_id, "--lease", job["lease"], "--description", "Rendering comparison", "--summary", "Prefer native Qt.", "--content", '{"choice":"Qt"}')
+    assert finished["state"] == "complete"
+    assert call("segment", "part", "--category", category, "--id", original["id"])["content"] == "Qt fits the native desktop."
+    bundle = call("segment", "compose", "--category", category, "--title", "Implementation context", "--ids", segment_id)
+    call("segment", "ready", "--category", category, "--id", bundle["id"])
+    assert call("segment", "process", "--category", category)["state"] == "complete"
+    assert len(call("segment", "list", "--category", category, "--state", "complete")["segments"]) == 2
+print("CLI workflow passed: events, commands, Git, segment intake, claim/finish, original evidence, and bundle composition.")
