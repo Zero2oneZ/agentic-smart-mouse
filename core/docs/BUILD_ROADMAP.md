@@ -7,12 +7,17 @@ orchestrator or a claim that the proposed stages are already available. Role
 contracts live in [PLANNED_SWARM_AGENTS.md](PLANNED_SWARM_AGENTS.md). Existing Rust
 plan, lease, grant, checkpoint and verifier contracts remain authoritative.
 
-As of this planning checkpoint:
+The [implemented build ledger](BUILD_LEDGER_API.md) now tracks this delivery work
+in private SQL: hierarchical steps, immutable documents, checkpoints, provenance
+forks, and links to Master chat, agent runs and recorded terminal commands. It
+indexes plans/evidence and does not replace the execution controller.
+
+As of this build checkpoint:
 
 - Implemented: local notes execution/recovery; private data/catalog separation;
   supervised CLI processes; saved run output; scoped chevron feed; pinned Qt loop
   policy, parent follow-up lineage and a read-only optimizer report.
-- Last verified: 29 offline Qt checks and the CLI workflow pass. Three TCP mock
+- Last verified: 32 offline Qt checks and the CLI workflow pass. Three TCP mock
   server checks are excluded. Provider behavior is tested with a fake provider.
 - Missing: Cargo for a fresh Rust build in this session, authenticated coding-run
   evidence, reliable live provider usage, independent general artifact acceptance,

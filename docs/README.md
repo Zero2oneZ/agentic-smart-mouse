@@ -21,3 +21,5 @@ The Rust fixture workflow does not execute real application builds or control th
 desktop. The desktop storage architecture does not create container sandboxes.
 Multi-user authentication, remote governance, model-driven orchestration and semantic
 retrieval remain planned. Each subsystem's documentation states its actual boundary.
+
+The [build ledger API](../core/docs/BUILD_LEDGER_API.md) describes implemented SQL roadmaps, versioned documents and step-bound agent/terminal evidence.

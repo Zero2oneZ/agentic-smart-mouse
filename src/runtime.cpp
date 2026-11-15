@@ -20,6 +20,7 @@ QVariantMap Backend::runtimeReport() const {
         tr("Chats, event evidence, origins, bindings and agent lifecycle metadata"));
     add(tr("Task database"), m_directory + "/orchestration.sqlite3", "private-state",
         tr("Rust workflow checkpoints, leases and local task results metadata"));
+    add(tr("Build documents"),m_directory+"/build-ledger","private-evidence",tr("Immutable document objects linked to versioned roadmap history"));
     add(tr("Task results"), m_directory + "/task-results", "user-output",
         tr("Checked notes results; never source architecture"));
     add(tr("Agent runs"), m_directory + "/agent-runs", "private-runtime",

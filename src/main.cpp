@@ -1,4 +1,5 @@
 #include "backend.h"
+#include "gitworkspace.h"
 #include "theme.h"
 #include "translator.h"
 #include <QCursor>
@@ -58,7 +59,7 @@ int main(int argc, char **argv) {
     const bool headless = QStringList{"events",   "read-event", "attach", "record",     "focus",
                                       "snapshot", "branch",     "sync",   "git-config", "run"}
                               .contains(commandName) ||
-                          commandName == "optimize" || commandName == "doctor" || commandName == "segment" || commandName == "architecture";
+                          commandName == "build" || commandName == "optimize" || commandName == "doctor" || commandName == "segment" || commandName == "architecture";
     if (check || smoke || headless) {
         qputenv("QT_QPA_PLATFORM", "offscreen");
         qputenv("QT_QPA_PLATFORMTHEME", "");
@@ -116,7 +117,22 @@ int main(int argc, char **argv) {
         }
         QJsonObject result;
         int exitCode = 0;
-        if(command=="optimize") {
+        if(command=="build") {
+            QFile request(option("--request-file"));
+            if(!request.open(QIODevice::ReadOnly)||request.size()>128000){QTextStream(stderr)<<"Build requests require --request-file with a JSON object under 128 KB\n";return 2;}
+            QJsonParseError parse;auto body=QJsonDocument::fromJson(request.readAll(),&parse);
+            if(parse.error!=QJsonParseError::NoError||!body.isObject()){QTextStream(stderr)<<"Invalid build request JSON\n";return 2;}
+            QString action;
+            for (int i = 1; i < options.size(); ++i) {
+                if (options[i].startsWith("--")) {
+                    if (options[i] != "--json") ++i;
+                    continue;
+                }
+                action = options[i];
+                break;
+            }
+            result=QJsonObject::fromVariantMap(backend.buildAction(action,body.object().toVariantMap()));
+        } else if(command=="optimize") {
             result=QJsonObject::fromVariantMap(backend.optimizerReport());
         } else if(command=="doctor") {
             result=QJsonObject::fromVariantMap(backend.runtimeReport());
@@ -251,7 +267,18 @@ int main(int argc, char **argv) {
                 QTextStream(stderr) << "Link an existing workspace directory first\n";
                 return 2;
             }
+            const auto buildRoad=option("--build"),buildStep=option("--step");
+            if(!buildStep.isEmpty()&&buildRoad.isEmpty()){QTextStream(stderr)<<"--step requires --build\n";return 2;}
+            if(!buildRoad.isEmpty()){
+                auto road=backend.buildAction("read",{{"schema_version",1},{"roadmap",buildRoad}});
+                if(road["workspace"].toInt()!=category){QTextStream(stderr)<<"The command workspace must match the roadmap workspace\n";return 2;}
+                if(!road["ok"].toBool()){QTextStream(stderr)<<road["error"].toString()<<'\n';return 2;}
+                if(!buildStep.isEmpty()){bool found=false;for(auto value:road["nodes"].toList())if(value.toMap()["id"].toString()==buildStep)found=true;if(!found){QTextStream(stderr)<<"Step is outside this roadmap\n";return 2;}}
+            }
+            const auto gitBefore=GitWorkspace::snapshot(path);
             qint64 started = backend.recordEvent(category, "command.started", description, description, path);
+            auto linkBuild=[&](qint64 event){if(buildRoad.isEmpty())return true;auto road=backend.buildAction("read",{{"schema_version",1},{"roadmap",buildRoad}});auto linked=backend.buildAction("link",{{"schema_version",1},{"request_id",QUuid::createUuid().toString(QUuid::Id128)},{"roadmap",buildRoad},{"node",buildStep},{"expected_revision",road["revision"]},{"kind","terminal_command"},{"ref",QString::number(event)}});return linked["ok"].toBool();};
+            if(!linkBuild(started)){QTextStream(stderr)<<"Could not bind terminal command to build step; command was not launched\n";return 1;}
             QProcess process;
             process.setWorkingDirectory(path);
             process.setProcessChannelMode(QProcess::MergedChannels);
@@ -282,7 +309,7 @@ int main(int argc, char **argv) {
             }
             output += process.readAll();
             output = output.left(240000);
-            QJsonObject detail{{"command", description},
+            QJsonObject detail{{"terminalSession",QString("terminal:%1").arg(started)},{"gitBefore",QJsonObject::fromVariantMap(gitBefore)},{"gitAfter",QJsonObject::fromVariantMap(GitWorkspace::snapshot(path))},{"build",buildRoad},{"step",buildStep},{"command", description},
                                {"cwd", path},
                                {"output", SessionLedger::redact(QString::fromUtf8(output))},
                                {"exitCode", exitCode},
@@ -296,7 +323,10 @@ int main(int argc, char **argv) {
             auto event = backend.recordEvent(category, "command.finished",
                                              description + QString(" · exit %1").arg(exitCode),
                                              QString::fromUtf8(QJsonDocument(detail).toJson()), path);
-            result = {{"event", double(event)}, {"exitCode", exitCode}};
+            const bool linked=linkBuild(event);
+            result = {{"event", double(event)}, {"exitCode", exitCode},{"buildLinked",linked},{"terminalSession",QString("terminal:%1").arg(started)}};
+            if(linked&&!buildRoad.isEmpty()&&exitCode!=0){auto road=backend.buildAction("read",{{"schema_version",1},{"roadmap",buildRoad}});auto issue=backend.buildAction("node.add",{{"schema_version",1},{"request_id",QString("command-failure:%1").arg(event)},{"roadmap",buildRoad},{"expected_revision",road["revision"]},{"parent",buildStep},{"kind","issue"},{"title",QString("Command failed: exit %1").arg(exitCode)},{"body",QString("Recorded terminal session terminal:%1; result event #%2. Inspect output and observed Git state before retrying.").arg(started).arg(event)}});result["buildIssueRecorded"]=issue["ok"].toBool();if(issue["ok"].toBool())result["buildIssue"]=issue["node"].toString();}
+            if(!linked){result["error"]="Command finished, but the build link needs reconciliation. Do not rerun the command automatically.";exitCode=1;}
         } else {
             if (command == "snapshot")
                 backend.captureGit();

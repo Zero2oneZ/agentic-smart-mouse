@@ -5,6 +5,7 @@
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
+#include <functional>
 
 class AgentService : public QObject {
     Q_OBJECT
@@ -14,6 +15,7 @@ class AgentService : public QObject {
   public:
     AgentService(const QSqlDatabase &db, const QString &directory, bool recover, QObject *parent = nullptr);
     ~AgentService() override;
+    void setBuildBinder(std::function<bool(const QString&,const QString&,const QString&,int)> binder) { m_buildBinder=std::move(binder); }
     QVariantList jobs() const;
     QVariantMap selected() const;
     QString problem() const { return m_problem; }
@@ -34,6 +36,7 @@ class AgentService : public QObject {
     void captureUsage(const QString &id);
     QString m_directory, m_selected, m_problem;
     QSqlDatabase m_db;
+    std::function<bool(const QString&,const QString&,const QString&,int)> m_buildBinder;
     QTimer m_publishTimer;
     QMap<QString, QProcess *> m_processes;
 };

@@ -80,6 +80,31 @@ with tempfile.TemporaryDirectory(prefix="hotbox-cli-") as temp:
     registry = call("architecture", "catalog", "--category", library_workspace)
     assert registry["attachments"] and len(registry["genres"]) == 1
     call("architecture", "ensure", "--category", library_workspace, "--capabilities", "music", "--artist", "../escape", expected=1)
+    build_request=root/'build-request.json'
+    def build(operation,payload,expected=0):
+        build_request.write_text(json.dumps({'schema_version':1,**payload}))
+        return call('build',operation,'--category',category,'--request-file',str(build_request),expected=expected)
+    assert build('schema',{})['api']=='hotbox.build'
+    created=build('create',{'request_id':'road-create','title':'CLI roadmap','branch_ref':'declared-main'})
+    roadmap=created['roadmap']
+    assert build('create',{'request_id':'road-create','title':'CLI roadmap','branch_ref':'declared-main'})['replayed']
+    step=build('node.add',{'request_id':'road-step','roadmap':roadmap,'expected_revision':1,'kind':'step','title':'Run a command'})
+    command=call('run','--category',category,'--build',roadmap,'--step',step['node'],'--',sys.executable,'-c',"print('bound command passed')")
+    assert command['buildLinked'] and command['terminalSession'].startswith('terminal:')
+    state=build('read',{'roadmap':roadmap})
+    assert len(state['links'])==2 and state['master_chat']==1
+    document=build('document.save',{'request_id':'road-doc','roadmap':roadmap,'expected_revision':state['revision'],'node':step['node'],'title':'Build notes','content':'Initial version'})
+    snapshot=build('checkpoint',{'request_id':'road-checkpoint','roadmap':roadmap,'expected_revision':document['revision']})
+    second=build('document.save',{'request_id':'road-doc-two','roadmap':roadmap,'expected_revision':snapshot['revision'],'document':document['document'],'parent_version':document['version'],'content':'Later version'})
+    branch=build('fork',{'request_id':'road-fork','roadmap':roadmap,'expected_revision':second['revision'],'checkpoint':snapshot['checkpoint'],'title':'Alternative build'})
+    forked=build('read',{'roadmap':branch['roadmap']})
+    first_version=forked['documents'][0]
+    assert build('document.read',{'roadmap':branch['roadmap'],'version':first_version['version']})['content']=='Initial version'
+    assert len(forked['links'])==2 and first_version['parent_version']==document['version']
+    build('node.update',{'request_id':'fake-verify','roadmap':roadmap,'expected_revision':second['revision'],'node':step['node'],'state':'verified'},expected=1)
+    failed=call('run','--category',category,'--build',roadmap,'--step',step['node'],'--',sys.executable,'-c','import sys; sys.exit(3)',expected=3)
+    assert failed['buildIssueRecorded']
+    assert any(node['id']==failed['buildIssue'] and node['kind']=='issue' for node in build('read',{'roadmap':roadmap})['nodes'])
     loop=call("optimize")
     assert loop["mode"]=="advisory_only" and loop["runs"]==0
     assert loop["policy"]["id"]=="master-loop-v1"
@@ -93,4 +118,4 @@ with tempfile.TemporaryDirectory(prefix="hotbox-cli-") as temp:
     assert not any(name in tracked for name in ("hotbox.sqlite3","orchestration.sqlite3","agent-runs","run.log"))
     assert data.joinpath("hotbox.sqlite3").exists()
 
-print("CLI workflow passed: sessions, Git, segments, architecture registration, read-only plans, and reusable storage.")
+print("CLI workflow passed: sessions, Git, segments, architecture registration, read-only plans, and reusable storage, versioned build documents, checkpoint forks and terminal bindings.")

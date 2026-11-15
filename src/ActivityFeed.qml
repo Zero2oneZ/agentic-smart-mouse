@@ -21,7 +21,7 @@ ListView {
   for(var i=0;i<pageCount;i++){var page=backend.activityPage(before);result=result.concat(page);if(page.length<40){more=false;break}more=true;before=page[page.length-1].id}
   rows=result
   var groups=[],lookup={}
-  for(var row of rows){if(backend.currentId===1){groups.push({group:false,key:String(row.id),row:row});continue}var key=String(row.category)+":"+(/^[a-f0-9]{32}$/.test(row.source||"")?row.source:row.session);if(!lookup[key]){lookup[key]={group:true,key:key,name:row.name,session:/^[a-f0-9]{32}$/.test(row.source||"")?row.source:row.session,items:[]};groups.push(lookup[key])}lookup[key].items.push(row)}
+  for(var row of rows){if(backend.currentId===1){groups.push({group:false,key:String(row.id),row:row});continue}var key=String(row.category)+":"+((row.source||"").startsWith("build:")?row.source:/^[a-f0-9]{32}$/.test(row.source||"")?row.source:row.session);if(!lookup[key]){lookup[key]={group:true,key:key,name:row.name,session:/^[a-f0-9]{32}$/.test(row.source||"")?row.source:row.session,items:[]};groups.push(lookup[key])}lookup[key].items.push(row)}
   model=groups
   Qt.callLater(function(){if(root.followTail)root.positionViewAtBeginning();else root.contentY=Math.max(root.originY,Math.min(oldY,root.originY+root.contentHeight-root.height))})
  }

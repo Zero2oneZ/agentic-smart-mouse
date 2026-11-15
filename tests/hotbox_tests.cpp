@@ -18,12 +18,77 @@
 #include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QScopeGuard>
+#include <QSqlError>
+#include <QSqlQuery>
 #include <functional>
 #include <QtTest>
 
 class HotboxTests : public QObject {
     Q_OBJECT
   private slots:
+    void buildLedgerProtectsImmutableEvidenceAndObjects() {
+        QTemporaryDir dir;Backend b(dir.path(),nullptr,false);
+        auto road=b.buildAction("create",{{"schema_version",1},{"request_id","make"},{"title","Private docs"}});QVERIFY(road["ok"].toBool());
+        auto doc=b.buildAction("document.save",{{"schema_version",1},{"request_id","doc"},{"roadmap",road["roadmap"]},{"expected_revision",1},{"title","Readme"},{"content","immutable content"}});QVERIFY(doc["ok"].toBool());
+        auto connection=QUuid::createUuid().toString();
+        {
+            auto db=QSqlDatabase::addDatabase("QSQLITE",connection);db.setDatabaseName(dir.filePath("hotbox.sqlite3"));QVERIFY(db.open());QSqlQuery q(db);
+            QVERIFY(!q.exec("UPDATE build_doc_versions SET content='changed'"));QVERIFY(q.lastError().text().contains("immutable"));QVERIFY(!q.exec("DELETE FROM build_changes"));db.close();
+        }
+        QSqlDatabase::removeDatabase(connection);
+        QFile object(dir.filePath("build-ledger/objects/")+doc["digest"].toString()+".txt");QVERIFY(object.open(QIODevice::WriteOnly|QIODevice::Truncate));object.write("corrupt");object.close();
+        auto rejected=b.buildAction("document.save",{{"schema_version",1},{"request_id","repeat-object"},{"roadmap",road["roadmap"]},{"expected_revision",2},{"title","Another"},{"content","immutable content"}});QVERIFY(!rejected["ok"].toBool());
+        QCOMPARE(b.buildAction("read",{{"schema_version",1},{"roadmap",road["roadmap"]}})["revision"].toInt(),2);
+        QVERIFY(!b.buildAction("node.add",{{"schema_version",1},{"request_id","bad-type"},{"roadmap",road["roadmap"]},{"expected_revision",QString("2")},{"kind","step"},{"title","No coercion"}})["ok"].toBool());
+    }
+    void agentRunsBindToBuildStepsBeforeLaunch() {
+        QTemporaryDir dir;QDir().mkpath(dir.filePath("bin"));QFile fake(dir.filePath("bin/codex"));QVERIFY(fake.open(QIODevice::WriteOnly));fake.write("#!/bin/sh\ncat > received.txt\nprintf 'bound output\\n'\n");fake.close();QVERIFY(fake.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner));
+        auto old=qgetenv("PATH");auto restore=qScopeGuard([&]{qputenv("PATH",old);});qputenv("PATH",(dir.filePath("bin")+":/usr/bin").toUtf8());
+        Backend b(dir.filePath("data"),nullptr,false);auto road=b.buildAction("create",{{"schema_version",1},{"request_id","road"},{"title","Build"}});QVERIFY(road["ok"].toBool());
+        auto step=b.buildAction("node.add",{{"schema_version",1},{"request_id","step"},{"roadmap",road["roadmap"]},{"expected_revision",1},{"kind","step"},{"title","Test"}});QVERIFY(step["ok"].toBool());
+        auto target=QVariantMap{{"name","Build"},{"id",1},{"build",road["roadmap"]},{"step",step["node"]}};
+        auto id=b.agents()->start("Bound test",target,"codex");QVERIFY(!id.isEmpty());QTRY_COMPARE_WITH_TIMEOUT(b.agents()->selected()["state"].toString(),QString("finished"),5000);
+        auto saved=b.buildAction("read",{{"schema_version",1},{"roadmap",road["roadmap"]}});QCOMPARE(saved["links"].toList().size(),1);QCOMPARE(saved["links"].toList().first().toMap()["ref"].toString(),id);
+        target["step"]="missing";QVERIFY(b.agents()->start("Must not launch",target,"codex").isEmpty());auto failed=b.agents()->jobs().first().toMap();QVERIFY(!QFileInfo(dir.filePath("data/agent-runs/")+failed["id"].toString()+"/received.txt").exists());
+    }
+    void buildLedgerVersionsForksAndScopes() {
+        QTemporaryDir dir;QString road,node,version,checkpoint;
+        {
+            Backend b(dir.path(),nullptr,false);auto workspace=b.addCategory("Ledger project","","",0);
+            auto create=QVariantMap{{"schema_version",1},{"request_id","create-one"},{"title","Build plan"},{"branch_ref","main"}};
+            auto first=b.buildAction("create",create);QVERIFY2(first["ok"].toBool(),qPrintable(first["error"].toString()));road=first["roadmap"].toString();
+            QCOMPARE(b.buildAction("create",create)["roadmap"].toString(),road);QVERIFY(b.buildAction("create",create)["replayed"].toBool());
+            create["title"]="Different";QVERIFY(!b.buildAction("create",create)["ok"].toBool());
+            auto read=[&]{return b.buildAction("read",{{"schema_version",1},{"roadmap",road}});};
+            int serial=0;auto change=[&](const QString &op,QVariantMap args){args["schema_version"]=1;args["request_id"]=QString("change-%1").arg(++serial);args["roadmap"]=road;args["expected_revision"]=read()["revision"];return b.buildAction(op,args);};
+            auto milestone=change("node.add",{{"kind","milestone"},{"title","Working build"}});QVERIFY(milestone["ok"].toBool());
+            auto step=change("node.add",{{"kind","step"},{"parent",milestone["node"]},{"title","Build API"}});QVERIFY(step["ok"].toBool());node=step["node"].toString();
+            QVERIFY(change("node.add",{{"kind","substep"},{"parent",node},{"title","Validate requests"}})["ok"].toBool());
+            auto revision=read()["revision"];QVERIFY(!change("node.update",{{"node",node},{"state","verified"}})["ok"].toBool());QCOMPARE(read()["revision"],revision);
+            QVERIFY(!b.buildAction("node.add",{{"schema_version",1},{"request_id","stale"},{"roadmap",road},{"expected_revision",1},{"kind","step"},{"title","Wrong revision"}})["ok"].toBool());
+            auto event=b.recordEvent(workspace,"command.finished","Tests failed","exit 1");QVERIFY(change("link",{{"node",node},{"kind","terminal_command"},{"ref",QString::number(event)}})["ok"].toBool());
+            auto doc=change("document.save",{{"node",node},{"title","API contract"},{"content",QString("password=private-example\n")+QString(7000,'a')}});QVERIFY2(doc["ok"].toBool(),qPrintable(doc["error"].toString()));version=doc["version"].toString();
+            auto content=b.buildAction("document.read",{{"schema_version",1},{"roadmap",road},{"version",version}});QVERIFY(!content["content"].toString().contains("private-example"));QVERIFY(content["nextOffset"].toInt()>0);
+            auto saved=change("checkpoint",{});QVERIFY(saved["ok"].toBool());checkpoint=saved["checkpoint"].toString();
+            QVERIFY(change("document.save",{{"document",doc["document"]},{"parent_version",version},{"content","second version"}})["ok"].toBool());
+            QVERIFY(!change("document.save",{{"document",doc["document"]},{"parent_version",version},{"content","stale version"}})["ok"].toBool());
+            auto sourceRevision=read()["revision"];auto fork=change("fork",{{"title","Alternative"},{"branch_ref","experiment"},{"checkpoint",checkpoint}});QVERIFY2(fork["ok"].toBool(),qPrintable(fork["error"].toString()));QCOMPARE(read()["revision"],sourceRevision);
+            auto branch=b.buildAction("read",{{"schema_version",1},{"roadmap",fork["roadmap"]}});QCOMPARE(branch["nodes"].toList().size(),3);QCOMPARE(branch["links"].toList().size(),1);
+            auto forkVersion=branch["documents"].toList().first().toMap();QCOMPARE(forkVersion["parent_version"].toString(),version);QCOMPARE(forkVersion["number"].toInt(),1);
+            auto forkContent=b.buildAction("document.read",{{"schema_version",1},{"roadmap",fork["roadmap"]},{"version",forkVersion["version"]}});QVERIFY(forkContent["content"].toString()!=QString("second version"));
+            auto piece=change("fork",{{"title","API branch"},{"node",node},{"checkpoint",checkpoint}});QVERIFY(piece["ok"].toBool());auto subtree=b.buildAction("read",{{"schema_version",1},{"roadmap",piece["roadmap"]}});QCOMPARE(subtree["nodes"].toList().size(),2);QCOMPARE(subtree["base_node"].toString(),node);QVERIFY(subtree["nodes"].toList().first().toMap()["parent"].toString().isEmpty());
+            auto other=b.addCategory("Outside","","",0);b.select(other);QVERIFY(!read()["ok"].toBool());QVERIFY(b.contextTool("read_build_roadmap",{{"roadmap",road}}).contains("error"));
+            b.select(1);QVERIFY(read()["ok"].toBool());QVERIFY(b.contextTool("read_build_document",{{"roadmap",road},{"version",version},{"offset",0}})["ok"].toBool());
+            auto history=b.buildAction("history",{{"schema_version",1},{"roadmap",road}});QVERIFY(!history["changes"].toList().isEmpty());QCOMPARE(first["master_chat"].toInt(),1);
+        }
+        {
+            Backend b(dir.path(),nullptr,false);auto result=b.buildAction("read",{{"schema_version",1},{"roadmap",road}});QVERIFY(result["ok"].toBool());QCOMPARE(result["documents"].toList().size(),2);
+            QVERIFY(b.buildAction("checkpoint.read",{{"schema_version",1},{"roadmap",road},{"checkpoint",checkpoint}})["ok"].toBool());
+            Theme theme(dir.path());Translator translator(dir.filePath("language"),dir.path());QQmlApplicationEngine engine;
+            engine.rootContext()->setContextProperty("backend",&b);engine.rootContext()->setContextProperty("theme",&theme);engine.rootContext()->setContextProperty("translator",&translator);engine.load(QUrl("qrc:/Main.qml"));QVERIFY(!engine.rootObjects().isEmpty());
+            auto *window=qobject_cast<QQuickWindow*>(engine.rootObjects().first());window->setProperty("page",QString("builds"));auto *view=window->findChild<QObject*>("buildLedgerView");QVERIFY(view);QVERIFY(QMetaObject::invokeMethod(view,"choose",Q_ARG(QVariant,QVariant(road))));window->show();QTest::qWait(100);QVERIFY(window->grabWindow().save("/tmp/hotbox-build-ledger-preview.png"));
+        }
+    }
     void masterLoopTracksReportedUsageAndParentBudgets() {
         QTemporaryDir dir;QDir().mkpath(dir.filePath("bin"));QFile fake(dir.filePath("bin/codex"));
         auto write=[&](int input){if(!fake.open(QIODevice::WriteOnly|QIODevice::Truncate))return false;fake.write(("#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":"+QString::number(input)+",\"output_tokens\":3}}'\n").toUtf8());fake.close();return fake.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner);};QVERIFY(write(12));
@@ -38,8 +103,8 @@ class HotboxTests : public QObject {
     void runtimeReportSeparatesPrivateStateAndOutputs() {
         QTemporaryDir dir;Backend b(dir.filePath("data"),nullptr,false);auto report=b.runtimeReport();
         QVERIFY(report["databaseOk"].toBool());QVERIFY(!report["runtimeInsideGit"].toBool());
-        auto locations=report["storage"].toList();QCOMPARE(locations.size(),5);
-        QSet<QString> paths;for(auto entry:locations){auto row=entry.toMap();QVERIFY(!row["purpose"].toString().isEmpty());paths.insert(row["path"].toString());}QCOMPARE(paths.size(),5);
+        auto locations=report["storage"].toList();QCOMPARE(locations.size(),6);
+        QSet<QString> paths;for(auto entry:locations){auto row=entry.toMap();QVERIFY(!row["purpose"].toString().isEmpty());paths.insert(row["path"].toString());}QCOMPARE(paths.size(),6);
         QDir().mkpath(dir.filePath("data/.git"));QFile head(dir.filePath("data/.git/HEAD"));QVERIFY(head.open(QIODevice::WriteOnly));head.write("ref: refs/heads/main\n");head.close();
         QVERIFY(b.runtimeReport()["runtimeInsideGit"].toBool());QVERIFY(!b.runtimeReport()["ok"].toBool());
     }

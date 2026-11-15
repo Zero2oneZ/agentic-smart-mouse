@@ -161,6 +161,8 @@ QString AgentService::start(const QString &prompt, const QVariantMap &target, co
                            {"id", target["id"].toInt()}};
     auto identity=target.value("identity").toMap();
     if(identity["category"].toInt()==safeTarget["id"].toInt() && identity["route"].toString().size()<=4000 && QRegularExpression("^[A-F0-9]{6}$").match(identity["mark"].toString()).hasMatch())safeTarget["identity"]=identity;
+    if(target.contains("build"))safeTarget["build"]=target["build"].toString();
+    if(target.contains("step"))safeTarget["step"]=target["step"].toString();
     QString prior;
     if (!previous.isEmpty()) {
         auto source = read(previous);
@@ -222,6 +224,7 @@ QString AgentService::start(const QString &prompt, const QVariantMap &target, co
     QSqlQuery metrics(m_db);metrics.prepare("INSERT INTO loop_metrics(run,root_run,parent_run,depth,policy_revision,policy) VALUES(?,?,?,?,?,?)");
     metrics.addBindValue(id);metrics.addBindValue(rootRun);metrics.addBindValue(previous.isNull()?QString(""):previous);metrics.addBindValue(depth);metrics.addBindValue(QString::fromLatin1(QCryptographicHash::hash(policyBytes,QCryptographicHash::Sha256).toHex()));metrics.addBindValue(QString::fromUtf8(policyBytes));
     if(!metrics.exec()){finish(id,"attention",tr("Could not pin the loop policy."));return fail(tr("Could not pin the loop policy."));}
+    if(!safeTarget.value("build").toString().isEmpty()&&(!m_buildBinder||!m_buildBinder(safeTarget["build"].toString(),safeTarget["step"].toString(),id,safeTarget["id"].toInt()))){finish(id,"attention",tr("Could not bind this run to the build ledger; provider was not launched."));return fail(tr("Build binding failed. Reload the roadmap and step."));}
     auto *process = new QProcess(this);
 #ifdef Q_OS_LINUX
     const auto ownerPid = getpid();

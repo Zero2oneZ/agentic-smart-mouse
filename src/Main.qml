@@ -55,6 +55,7 @@ ApplicationWindow {
       Label {text:"●";color:theme.accent;font.pixelSize:18}
      }
      Button {text:qsTr("Mouse Hotbox");Layout.fillWidth:true;onClicked:backend.launch("keypad")}
+     Button {text:qsTr("Build roadmap");Layout.fillWidth:true;onClicked:win.page="builds"}
      Button {text:qsTr("Agents");Layout.fillWidth:true;onClicked:win.page="agents"}
      Button {text:qsTr("Teach a helper");Layout.fillWidth:true;flat:true;onClicked:win.page="recordings"}
      Button {text:qsTr("New task");Layout.fillWidth:true;onClicked:{win.page="tasks";tasksView.newTask()}}
@@ -96,7 +97,7 @@ ApplicationWindow {
       anchors.fill:parent;anchors.margins:22
       ColumnLayout {Layout.fillWidth:true;spacing:5
        Label {visible:win.page==="chat";text:qsTr("%1  ·  %2").arg(backend.feedIdentity.mark).arg(backend.feedIdentity.route);textFormat:Text.PlainText;color:backend.feedIdentity.color;font.pixelSize:11;Layout.fillWidth:true;elide:Text.ElideMiddle}
-       Label {text:win.page==="agents"?qsTr("Agents"):win.page==="recordings"?qsTr("Teach a helper"):win.page==="tasks"?qsTr("Activity"):win.page==="architecture"?qsTr("Files and storage"):win.page==="segments"?qsTr("Saved work"):win.page==="timeline"?qsTr("History"):(win.page==="bindings"?qsTr("Omarchy keybindings"):backend.title);font.pixelSize:22;font.weight:Font.DemiBold}
+       Label {text:win.page==="builds"?qsTr("Build roadmap"):win.page==="agents"?qsTr("Agents"):win.page==="recordings"?qsTr("Teach a helper"):win.page==="tasks"?qsTr("Activity"):win.page==="architecture"?qsTr("Files and storage"):win.page==="segments"?qsTr("Saved work"):win.page==="timeline"?qsTr("History"):(win.page==="bindings"?qsTr("Omarchy keybindings"):backend.title);font.pixelSize:22;font.weight:Font.DemiBold}
        Label {text:win.page==="tasks"?qsTr("Your tasks, progress, and results"):win.page==="bindings"?qsTr("Search shortcuts from your current desktop configuration"):(backend.folder||qsTr("Persistent conversation · local memory"));color:"#9198a6";font.pixelSize:12;elide:Text.ElideMiddle;Layout.fillWidth:true}
       }
       Button {visible:win.page==="chat";text:qsTr("Project brief");onClicked:win.editCategory(backend.currentId,0)}
@@ -170,6 +171,7 @@ ApplicationWindow {
      Button {text:qsTr("Pause");onClicked:backend.recorder.togglePause()}
      Button {text:qsTr("Finish");onClicked:{backend.recorder.stop();win.page="recordings"}}
     }
+    Builds {visible:win.page==="builds";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
     Agents {id:agentView;visible:win.page==="agents";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
     Recordings {id:recordingsView;visible:win.page==="recordings";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
     Tasks {id:tasksView;visible:win.page==="tasks";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:22}

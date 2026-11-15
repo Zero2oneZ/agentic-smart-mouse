@@ -47,6 +47,15 @@ specialties, but the first team is only a builder and independent verifier with
 ordinary code controlling preparation, accounting and dispatch. These are planned
 definitions, not newly launched workers or enabled swarm capabilities.
 
+## Build roadmap and evidence
+
+The **Build roadmap** sidebar now stores milestones, steps, substeps, issues and
+checkpoints in private SQL. Documents have immutable versions; roadmap/subtree
+forks retain provenance. Master chat events, supervised agent runs and recorded
+terminal commands attach to the selected step. See the [build ledger API](core/docs/BUILD_LEDGER_API.md)
+for storage ownership, structured requests and `hotbox run --build ... --step ...`.
+This planning ledger preserves the Rust execution and verification contracts.
+
 ## Build and run
 
 `bin/build`, `bin/test`, then `build/hotbox open`. Install system-wide with `bin/install`, or use `bin/install-local` for a staged user-local update with database/binary backups and launcher installation; restart the resident app separately. `hotbox daemon` runs in the background; `hotbox open` opens Activity; `hotbox menu` previews the hotbox; `hotbox release` dismisses it; `hotbox keybindings` opens shortcut search; `hotbox quit` stops the resident app.
@@ -59,7 +68,7 @@ The development machine uses a user-local install: executable in `~/.local/bin/h
 
 ## Verification
 
-Thirty-two Qt Test checks cover the application. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, context-tool round trips, architecture registration, shared-library reuse, and preservation of user files. Offscreen screenshots use sample content. The live overlay rendered successfully; the previous Tab + Q shortcut failed verification. The replacement Ctrl + Super bindings passed Lua callback checks and loaded in Hyprland without configuration errors; they still require a physical-keyboard check. The Super + numpad + binding is loaded without configuration errors. Numpad focus, NumLock aliases, recording recovery and browser import filtering pass offscreen tests; five browser-companion tests and the Lua keypad callback check pass. The companion has not been tested in a live browser. Keep desktop keyboard injection out of further automated checks.
+Thirty-five Qt Test checks cover the application. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, context-tool round trips, architecture registration, shared-library reuse, and preservation of user files. Offscreen screenshots use sample content. The live overlay rendered successfully; the previous Tab + Q shortcut failed verification. The replacement Ctrl + Super bindings passed Lua callback checks and loaded in Hyprland without configuration errors; they still require a physical-keyboard check. The Super + numpad + binding is loaded without configuration errors. Numpad focus, NumLock aliases, recording recovery and browser import filtering pass offscreen tests; five browser-companion tests and the Lua keypad callback check pass. The companion has not been tested in a live browser. Keep desktop keyboard injection out of further automated checks.
 
 ## Model connection
 

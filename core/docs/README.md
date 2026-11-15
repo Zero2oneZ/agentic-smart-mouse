@@ -7,6 +7,7 @@ the fixed local notes recipe. General orchestration adapters remain separate.
 
 | Start here | Contents |
 | --- | --- |
+| [Build ledger API](BUILD_LEDGER_API.md) | Implemented SQL roadmap, versioned documents, scoped evidence and checkpoint/subtree forks |
 | [Build roadmap](BUILD_ROADMAP.md) | Ordered delivery stages, dependencies, runtime/data ownership and acceptance gates |
 | [Planned build swarm](PLANNED_SWARM_AGENTS.md) | Nine disabled/planned roles, capability boundaries, handoffs and parent-budget rules |
 | [Whole-product release review](../../docs/PRODUCT_REVIEW.md) | Consolidated user-facing priorities, clean UI, deterministic setup and supervised background work |

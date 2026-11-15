@@ -34,3 +34,6 @@ SOURCES += ../src/activityfeed.cpp
 SOURCES += ../src/runtime.cpp
 
 SOURCES += ../src/loopoptimizer.cpp
+
+HEADERS += ../src/buildledger.h
+SOURCES += ../src/buildledger.cpp

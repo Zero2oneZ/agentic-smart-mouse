@@ -1,5 +1,6 @@
 #pragma once
 #include "architecturestore.h"
+#include "buildledger.h"
 #include "agentservice.h"
 #include "segmentstore.h"
 #include "sessionledger.h"
@@ -50,6 +51,7 @@ class Backend : public QObject {
     ~Backend() override;
     Q_INVOKABLE QVariantList activityPage(qint64 before=0) const;
     Q_INVOKABLE QVariantMap activityDetail(qint64 id,int offset=0) const;
+    Q_INVOKABLE QVariantMap buildAction(const QString &operation,const QVariantMap &arguments);
     Q_INVOKABLE QVariantMap runtimeReport() const;
     Q_INVOKABLE QVariantMap optimizerReport(int scope=0) const;
     QVariantMap feedIdentity() const;
@@ -159,6 +161,7 @@ class Backend : public QObject {
     void collectTools(const QJsonObject &delta);
     QJsonArray toolDefinitions() const;
     void gitTask(const QString &operation, int category);
+    std::unique_ptr<BuildLedger> m_build;
     std::unique_ptr<AgentService> m_agents;
     std::unique_ptr<Demonstrations> m_recorder;
     std::unique_ptr<TaskService> m_tasks;
