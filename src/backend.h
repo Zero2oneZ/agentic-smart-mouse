@@ -1,4 +1,5 @@
 #pragma once
+#include "architecturestore.h"
 #include "segmentstore.h"
 #include "sessionledger.h"
 #include <QFutureWatcher>
@@ -16,6 +17,7 @@
 class Backend : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantList categories READ categories NOTIFY changed)
+    Q_PROPERTY(QVariantMap architecture READ architecture NOTIFY activityChanged)
     Q_PROPERTY(QVariantList messages READ messages NOTIFY changed)
     Q_PROPERTY(QVariantList segments READ segments NOTIFY activityChanged)
     Q_PROPERTY(bool segmentAuto READ segmentAuto WRITE setSegmentAuto NOTIFY activityChanged)
@@ -37,6 +39,9 @@ class Backend : public QObject {
     explicit Backend(const QString &directory = {}, QObject *parent = nullptr);
     ~Backend() override;
     QVariantList categories() const;
+    QVariantMap architecture() const;
+    Q_INVOKABLE QVariantMap architectureAction(const QString &action,
+                                               const QVariantMap &arguments = QVariantMap());
     QVariantList messages() const;
     QVariantList bindings() const { return m_bindings; }
     int currentId() const { return m_current; }
@@ -118,6 +123,7 @@ class Backend : public QObject {
     QJsonArray toolDefinitions() const;
     void gitTask(const QString &operation, int category);
     std::unique_ptr<SessionLedger> m_ledger;
+    std::unique_ptr<ArchitectureStore> m_architecture;
     std::unique_ptr<SegmentStore> m_segments;
     QTimer m_segmentPoll;
     QFutureWatcher<QVariantMap> m_gitTask;

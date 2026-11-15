@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     const bool headless = QStringList{"events",   "read-event", "attach", "record",     "focus",
                                       "snapshot", "branch",     "sync",   "git-config", "run"}
                               .contains(commandName) ||
-                          commandName == "segment";
+                          commandName == "segment" || commandName == "architecture";
     if (check || smoke || headless) {
         qputenv("QT_QPA_PLATFORM", "offscreen");
         qputenv("QT_QPA_PLATFORMTHEME", "");
@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
         qputenv("QT_QUICK_BACKEND", "software");
     QGuiApplication app(argc, argv);
     app.setApplicationName("hotbox");
-    app.setApplicationVersion("0.3.0");
+    app.setApplicationVersion("0.4.0");
     app.setDesktopFileName("hotbox");
     app.setQuitOnLastWindowClosed(false);
     app.setWindowIcon(QIcon::fromTheme("hotbox"));
@@ -104,7 +104,28 @@ int main(int argc, char **argv) {
         }
         QJsonObject result;
         int exitCode = 0;
-        if (command == "segment") {
+        if (command == "architecture") {
+            QString action = "catalog";
+            for (int i = 1; i < options.size(); ++i) {
+                if (options[i].startsWith("--")) {
+                    if (options[i] != "--json")
+                        ++i;
+                    continue;
+                }
+                action = options[i];
+                break;
+            }
+            QVariantMap arguments{{"toolRoot", option("--tool-root")},
+                                  {"id", option("--id")},
+                                  {"path", option("--relative-path")},
+                                  {"description", option("--description")},
+                                  {"runtimeRoot", option("--runtime-root")},
+                                  {"capabilities", option("--capabilities").split(',', Qt::SkipEmptyParts)},
+                                  {"artist", option("--artist")},
+                                  {"album", option("--album")},
+                                  {"genre", option("--genre")}};
+            result = QJsonObject::fromVariantMap(backend.architectureAction(action, arguments));
+        } else if (command == "segment") {
             QString action = "list";
             for (int i = 1; i < options.size(); ++i) {
                 if (options[i].startsWith("--")) {
@@ -446,9 +467,20 @@ int main(int argc, char **argv) {
         QTimer::singleShot(2200, &app, [&, output] {
             menu->grabWindow().save(output + "/hotbox.png");
             backend.release();
+            backend.select(1);
+            backend.architectureAction("init");
+            backend.addCategory("Media workspace", "", "Sample reusable libraries", 1);
+            backend.architectureAction("ensure", {{"capabilities", QStringList{"music", "album-covers"}},
+                                                  {"artist", "Sample Band"},
+                                                  {"album", "Sample Album"},
+                                                  {"genre", "Rock"}});
+            backend.clearStatus();
+            mainWindow->setProperty("page", "architecture");
         });
         QTimer::singleShot(2600, &app, [&, output] {
+            mainWindow->grabWindow().save(output + "/architecture.png");
             QJsonObject result{{"ok", true},
+                               {"architecture", QFile::exists(output + "/architecture.png")},
                                {"chat", QFile::exists(output + "/chat.png")},
                                {"hotbox", QFile::exists(output + "/hotbox.png")}};
             QTextStream(stdout) << QJsonDocument(result).toJson(QJsonDocument::Compact) << '\n';

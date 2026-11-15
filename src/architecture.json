@@ -1,0 +1,21 @@
+{
+  "id": "media-v1",
+  "version": 1,
+  "description": "Shared user-owned media. Create only requested capabilities. Runtime content is never part of the source monorepo.",
+  "capabilities": [
+    {"id": "music", "path": "media/music", "description": "Music library; canonical artist and album storage"},
+    {"id": "sounds", "path": "media/sounds", "description": "Reusable sound assets"},
+    {"id": "video", "path": "media/video", "description": "User video library"},
+    {"id": "pictures", "path": "media/pictures", "description": "User pictures and generated images"},
+    {"id": "album-covers", "path": "media/pictures/bands", "description": "Band pictures and album covers, using the same artist and album identities as music"}
+  ],
+  "layouts": {
+    "artist": "media/music/artists/{artist}",
+    "album": "media/music/artists/{artist}/albums/{album}",
+    "songs": "media/music/artists/{artist}/albums/{album}/songs",
+    "genre": "media/music/genres/{genre}",
+    "band": "media/pictures/bands/{artist}",
+    "cover": "media/pictures/bands/{artist}/album-covers/{album}"
+  },
+  "classification": "Explicit labels only. Genres reference canonical artist or album IDs through the private registry; no media is duplicated, scanned, moved, or classified automatically."
+}

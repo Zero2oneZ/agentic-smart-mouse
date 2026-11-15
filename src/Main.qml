@@ -65,6 +65,7 @@ ApplicationWindow {
      Rectangle {Layout.fillWidth:true;height:1;color:"#252a33"}
      Button {text:qsTr("⌨  Keybindings");Layout.fillWidth:true;flat:true;onClicked:{win.page="bindings";backend.refreshBindings();bindingSearch.forceActiveFocus()}}
      Button {text:qsTr("Reusable segments");Layout.fillWidth:true;flat:true;onClicked:win.page="segments"}
+     Button {text:qsTr("Shared architecture");Layout.fillWidth:true;flat:true;onClicked:win.page="architecture"}
      Button {text:qsTr("Session timeline");Layout.fillWidth:true;flat:true;onClicked:win.page="timeline"}
      Button {text:qsTr("Model settings");Layout.fillWidth:true;flat:true;onClicked:settings.open()}
      Button {text:qsTr("Archived categories");Layout.fillWidth:true;flat:true;onClicked:archiveDialog.open()}
@@ -79,7 +80,7 @@ ApplicationWindow {
      RowLayout {
       anchors.fill:parent;anchors.margins:22
       ColumnLayout {Layout.fillWidth:true;spacing:5
-       Label {text:win.page==="segments"?qsTr("Reusable segments"):win.page==="timeline"?qsTr("Session timeline"):(win.page==="bindings"?qsTr("Omarchy keybindings"):backend.title);font.pixelSize:22;font.weight:Font.DemiBold}
+       Label {text:win.page==="architecture"?qsTr("Shared architecture"):win.page==="segments"?qsTr("Reusable segments"):win.page==="timeline"?qsTr("Session timeline"):(win.page==="bindings"?qsTr("Omarchy keybindings"):backend.title);font.pixelSize:22;font.weight:Font.DemiBold}
        Label {text:win.page==="bindings"?qsTr("Search shortcuts from your current desktop configuration"):(backend.folder||qsTr("Persistent conversation · local memory"));color:"#9198a6";font.pixelSize:12;elide:Text.ElideMiddle;Layout.fillWidth:true}
       }
       Button {visible:win.page==="chat";text:qsTr("Project brief");onClicked:win.editCategory(backend.currentId,0)}
@@ -155,6 +156,7 @@ ApplicationWindow {
      }
     }
     Segments {objectName:"segmentsView";visible:win.page==="segments";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
+    Architecture {visible:win.page==="architecture";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
     Timeline {owner:win;visible:win.page==="timeline";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
     Rectangle {
      visible:backend.status.length>0;Layout.fillWidth:true;Layout.preferredHeight:statusLabel.implicitHeight+24;color:"#2c281c"

@@ -63,4 +63,17 @@ with tempfile.TemporaryDirectory(prefix="hotbox-cli-") as temp:
     call("segment", "ready", "--category", category, "--id", bundle["id"])
     assert call("segment", "process", "--category", category)["state"] == "complete"
     assert len(call("segment", "list", "--category", category, "--state", "complete")["segments"]) == 2
-print("CLI workflow passed: events, commands, Git, segment intake, claim/finish, original evidence, and bundle composition.")
+    architecture = call("architecture", "init")
+    assert architecture["ok"] and architecture["containerStatus"] == "not_configured"
+    call("architecture", "define", "--id", "documents", "--relative-path", "libraries/documents", "--description", "Shared documents")
+    library_workspace = str(call("focus", "--category", "1", "--name", "Storage project", "--folder", "")["category"])
+    storage_args = ("--category", library_workspace, "--capabilities", "music,album-covers,documents", "--artist", "Sample Band", "--album", "Sample Album", "--genre", "Rock")
+    preview = call("architecture", "plan", *storage_args)
+    assert preview["ok"] and not Path(preview["source"]).exists()
+    provisioned = call("architecture", "ensure", *storage_args)
+    assert provisioned["ok"] and Path(provisioned["source"]).is_dir()
+    assert call("architecture", "ensure", *storage_args)["ok"]
+    registry = call("architecture", "catalog", "--category", library_workspace)
+    assert registry["attachments"] and len(registry["genres"]) == 1
+    call("architecture", "ensure", "--category", library_workspace, "--capabilities", "music", "--artist", "../escape", expected=1)
+print("CLI workflow passed: sessions, Git, segments, architecture registration, read-only plans, and reusable storage.")

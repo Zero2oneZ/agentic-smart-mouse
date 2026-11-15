@@ -551,6 +551,157 @@ class HotboxTests : public QObject {
         QCOMPARE(b.segmentAction("read", {{"id", id}})["artifacts"].toList().size(), 0);
         QVERIFY(b.segmentAction("ready", {{"id", id}}).contains("error"));
     }
+    void architectureReusesLibrariesAndPreservesBelongings() {
+        QTemporaryDir dir;
+        QString data = dir.filePath("private"), musicPath, source;
+        int first, second;
+        {
+            Backend b(data);
+            auto initialized = b.architectureAction("init");
+            QVERIFY2(initialized["ok"].toBool(), qPrintable(initialized["error"].toString()));
+            QVERIFY(b.architectureAction("init")["reused"].toBool());
+            QString runtime = initialized["runtimeRoot"].toString();
+            QVERIFY(!QFileInfo::exists(runtime + "/media"));
+            auto snapshot = GitWorkspace::snapshot(initialized["toolRoot"].toString());
+            QVERIFY(snapshot["ok"].toBool());
+            QVERIFY(snapshot["tree"].toString().contains("templates/media-v1.json"));
+            first = b.addCategory("Player", "", "", 1);
+            second = b.addCategory("Another app", "", "", 1);
+            b.select(first);
+            QVariantMap args{{"capabilities", QStringList{"music", "album-covers"}},
+                             {"artist", "Example Band"},
+                             {"album", "First Album"},
+                             {"genre", "Rock"}};
+            auto preview = b.architectureAction("plan", args);
+            QVERIFY2(preview["ok"].toBool(), qPrintable(preview["error"].toString()));
+            source = preview["source"].toString();
+            QVERIFY(!QFileInfo::exists(source));
+            auto created = b.architectureAction("ensure", args);
+            QVERIFY2(created["ok"].toBool(), qPrintable(created["error"].toString()));
+            QCOMPARE(b.folder(), source);
+            musicPath = created["entity"].toString() + "/songs";
+            QVERIFY(QFileInfo::exists(musicPath));
+            QVERIFY(QFileInfo::exists(runtime + "/media/pictures/bands"));
+            QVERIFY(!QFileInfo::exists(runtime + "/media/video"));
+            QFile song(musicPath + "/private-song.ogg");
+            QVERIFY(song.open(QIODevice::WriteOnly));
+            song.write("private-song-bytes");
+            song.close();
+            QVERIFY(b.architectureAction("ensure", args)["ok"].toBool());
+            QCOMPARE(b.architecture()["genres"].toList().size(), 1);
+            b.select(second);
+            QCOMPARE(b.architecture()["attachments"].toList().size(), 0);
+            auto reused = b.architectureAction("ensure", args);
+            QVERIFY(reused["ok"].toBool());
+            QCOMPARE(reused["entity"], created["entity"]);
+            QCOMPARE(b.architecture()["genres"].toList().size(), 1);
+            auto musicOnly = args;
+            musicOnly["genre"] = "Jazz";
+            QVERIFY(b.architectureAction("ensure", musicOnly)["ok"].toBool());
+            QCOMPARE(b.architecture()["genres"].toList().size(), 2);
+            auto sourceTree = GitWorkspace::snapshot(initialized["toolRoot"].toString());
+            QVERIFY(!sourceTree["status"].toString().contains("private-song"));
+            QFile manifest(source + "/project.json");
+            QVERIFY(manifest.open(QIODevice::ReadOnly));
+            auto bytes = manifest.readAll();
+            QVERIFY(!bytes.contains(runtime.toUtf8()));
+            QVERIFY(!bytes.contains("Example Band"));
+            QVERIFY(song.open(QIODevice::ReadOnly));
+            QCOMPARE(song.readAll(), QByteArray("private-song-bytes"));
+            b.archive(first);
+            QVERIFY(QFileInfo::exists(musicPath + "/private-song.ogg"));
+        }
+        Backend reopened(data);
+        reopened.select(second);
+        QVERIFY(reopened.architecture()["initialized"].toBool());
+        QCOMPARE(reopened.architecture()["genres"].toList().size(), 2);
+        QVERIFY(QFileInfo::exists(musicPath + "/private-song.ogg"));
+    }
+    void architectureRejectsUnsafePathsAndScopesModelTools() {
+        QTemporaryDir dir;
+        Backend b(dir.filePath("private"));
+        QVERIFY(b.architectureAction("init", {{"toolRoot", dir.filePath("same")},
+                                              {"runtimeRoot", dir.filePath("same/child")}})
+                    .contains("error"));
+        QVERIFY(!QFileInfo::exists(dir.filePath("same")));
+        auto initialized = b.architectureAction("init");
+        QVERIFY(initialized["ok"].toBool());
+        int first = b.addCategory("First", "", "", 1), second = b.addCategory("Second", "", "", 1);
+        QVariantMap args{{"category", first},
+                         {"capabilities", QStringList{"music"}},
+                         {"artist", "Band"},
+                         {"album", "Album"},
+                         {"genre", "Genre"}};
+        b.select(first);
+        QVERIFY(b.architectureAction("init").contains("error"));
+        QVERIFY(b.architectureAction("ensure", args)["ok"].toBool());
+        b.select(second);
+        auto scoped = b.contextTool("read_architecture", {}, second);
+        QVERIFY(scoped["attachments"].toList().isEmpty());
+        QVERIFY(!scoped.contains("runtimeRoot"));
+        QVERIFY(b.contextTool("plan_storage", args, second).contains("error"));
+        QVERIFY(b.contextTool("plan_storage", args, 1)["ok"].toBool());
+        QVERIFY(b.contextTool("ensure_storage", args, second).contains("error"));
+        auto unsafe = args;
+        unsafe["artist"] = "../../outside";
+        QVERIFY(b.architectureAction("ensure", unsafe).contains("error"));
+        unsafe = args;
+        unsafe["capabilities"] = QStringList{"unknown"};
+        QVERIFY(b.architectureAction("ensure", unsafe).contains("error"));
+        unsafe = args;
+        unsafe["artist"] = "";
+        QVERIFY(b.architectureAction("ensure", unsafe).contains("error"));
+        QString runtime = initialized["runtimeRoot"].toString();
+        QVERIFY(QDir().mkpath(dir.filePath("outside")));
+        QVERIFY(QFile::link(dir.filePath("outside"), runtime + "/media/sounds"));
+        QVERIFY(b.architectureAction("ensure", {{"capabilities", QStringList{"sounds"}}}).contains("error"));
+        QVERIFY(QDir(dir.filePath("outside")).isEmpty());
+        int linked = b.addCategory("Existing folder", dir.filePath("unrelated"), "", 1);
+        b.select(linked);
+        QVERIFY(b.architectureAction("ensure", args).contains("error"));
+        b.select(1);
+        auto master = b.contextTool("read_architecture", {}, 1);
+        QVERIFY(!master["attachments"].toList().isEmpty());
+        QVERIFY(master["genres"].toList().size() == 1);
+    }
+    void architectureExtendsTemplateBeforeCreatingDirectories() {
+        QTemporaryDir dir;
+        Backend b(dir.filePath("private"));
+        auto initialized = b.architectureAction(
+            "init", {{"toolRoot", dir.filePath("tool")}, {"runtimeRoot", dir.filePath("user")}});
+        QVERIFY(initialized["ok"].toBool());
+        QVERIFY(b.architectureAction("init")["reused"].toBool());
+        const QString runtime = initialized["runtimeRoot"].toString();
+        QVariantMap definition{{"id", "documents"},
+                               {"path", "libraries/documents"},
+                               {"description", "Reusable document library"}};
+        auto registered = b.architectureAction("define", definition);
+        QVERIFY2(registered["ok"].toBool(), qPrintable(registered["error"].toString()));
+        QVERIFY(b.architectureAction("define", definition)["reused"].toBool());
+        QVERIFY(!QFileInfo::exists(runtime + "/libraries"));
+        auto bad = definition;
+        bad["path"] = "libraries/../../escape";
+        QVERIFY(b.architectureAction("define", bad).contains("error"));
+        bad["path"] = "libraries/other";
+        QVERIFY(b.architectureAction("define", bad).contains("error"));
+        int project = b.addCategory("Reader", "", "", 1);
+        b.select(project);
+        QVERIFY(b.architectureAction("define", definition).contains("error"));
+        auto args = QJsonObject{{"capabilities", QJsonArray{"documents"}}}.toVariantMap();
+        auto plan = b.architectureAction("plan", args);
+        QVERIFY2(plan["ok"].toBool(), qPrintable(plan["error"].toString()));
+        QVERIFY(!QFileInfo::exists(runtime + "/libraries/documents"));
+        QVERIFY(b.architectureAction("ensure", args)["ok"].toBool());
+        QVERIFY(QFileInfo::exists(runtime + "/libraries/documents"));
+        // An edited source file is not replaced by repeat provisioning.
+        QFile source(b.folder() + "/src/.gitkeep");
+        QVERIFY(source.open(QIODevice::WriteOnly));
+        source.write("user source content");
+        source.close();
+        QVERIFY(b.architectureAction("ensure", args).contains("error"));
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        QCOMPARE(source.readAll(), QByteArray("user source content"));
+    }
     void qmlLoadsAndCenterOpensMaster() {
         QTemporaryDir dir;
         Backend b(dir.path());
@@ -568,6 +719,16 @@ class HotboxTests : public QObject {
         engine.load(QUrl("qrc:/Main.qml"));
         QVERIFY2(!engine.rootObjects().isEmpty(), qPrintable(warnings.join('\n')));
         auto *win = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(win->findChild<QObject *>("architectureView"));
+        QVERIFY(b.architectureAction("init")["ok"].toBool());
+        int project = b.focusWorkspace(1, "Sample project", "Reusable media storage");
+        QCOMPARE(b.folder(), QString(""));
+        QVERIFY(project > 1);
+        QVERIFY(b.architectureAction("ensure", {{"capabilities", QStringList{"pictures"}}})["ok"].toBool());
+        win->setProperty("page", "architecture");
+        win->show();
+        QTest::qWait(100);
+        b.select(1);
         auto *overlay = win->findChild<QQuickWindow *>("hotboxOverlay");
         QVERIFY(overlay);
         overlay->setProperty("anchorX", 500);

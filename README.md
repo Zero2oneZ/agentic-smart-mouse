@@ -20,7 +20,7 @@ The development machine uses a user-local install: executable in `~/.local/bin/h
 
 ## Verification
 
-Eighteen Qt Test checks cover the application. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, and context-tool round trips. Offscreen screenshots use sample content. The live overlay rendered successfully; the previous Tab + Q shortcut failed verification. The replacement Ctrl + Super bindings passed Lua callback checks and loaded in Hyprland without configuration errors; they still require a physical-keyboard check. Keep desktop keyboard injection out of further automated checks.
+Twenty-one Qt Test checks cover the application. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, context-tool round trips, architecture registration, shared-library reuse, and preservation of user files. Offscreen screenshots use sample content. The live overlay rendered successfully; the previous Tab + Q shortcut failed verification. The replacement Ctrl + Super bindings passed Lua callback checks and loaded in Hyprland without configuration errors; they still require a physical-keyboard check. Keep desktop keyboard injection out of further automated checks.
 
 ## Model connection
 
@@ -130,3 +130,52 @@ Use IDs returned by `create`, `add`, and `claim`. The claim response includes th
 To reuse command I/O already captured by `hotbox run`, attach the returned event with `segment add --category ID --id SEGMENT_ID --kind history --event EVENT_ID`. `segment from_chat --category ID --title "Chat checkpoint"` captures chat references; `segment process --category ID` processes the next ready segment locally. List results are newest first and accept `--before SEQUENCE` for pagination.
 
 Everything remains local unless you explicitly export it. No external database connector or live web-search worker is configured by this feature. Common credential patterns are redacted before storing new artifacts; this is not a complete secret detector. Session artifacts and summaries remain outside pushed Git branches.
+
+
+## Shared development architecture and user belongings
+
+![Shared architecture with sample content](docs/architecture.png)
+
+Open **Shared architecture** in the sidebar. From **Master chat**, initialize two empty roots (defaults shown below). Hotbox initializes a local Git monorepo for templates and project source, with an initial architecture commit. If master chat has no linked folder, it links this root. Existing linked repositories are left alone. No remote or automatic push is configured for this new monorepo. The development machine runs Hotbox 0.4.0 with both default roots initialized.
+
+```text
+~/.local/share/hotbox/development/       Tool-managed Git tree
+  architecture.json
+  templates/media-v1.json
+  projects/workspace-<id>/
+    project.json
+    src/
+
+~/.local/share/hotbox/belongings/        User/runtime tree, outside Git
+  apps/workspace-<id>/
+    state/
+    config/
+    cache/
+  media/                               Only requested libraries are created
+    music/artists/<artist>/albums/<album>/songs/
+    music/genres/<genre>/
+    pictures/bands/<artist>/album-covers/<album>/
+    sounds/
+    video/
+  libraries/                           Additional registered capabilities
+```
+
+These are corresponding trees, not synchronized copies. The template describes the shared layout. Each focused project gets its own source scaffold and runtime state, with private registry bindings to shared user libraries. A project must have no linked folder, or already link its managed scaffold; Hotbox does not adopt or reorganize unrelated folders.
+
+In a focused workspace, choose **Music**, **Sounds**, **Video**, **Pictures**, or **Album covers**, optionally supplying artist, album and genre labels. **Preview directories** shows which paths already exist. **Create missing and attach existing** recomputes the plan, creates missing directories, and reuses existing ones without replacing files. Repeating the same request or requesting it from another project reuses the same library. Adding a genre records an association with the canonical artist or album instead of copying its music. Artist and album directory names use normalized labels plus a stable hash to avoid collisions. Songs are files an app can later place in the songs directory; this feature does not import or classify media.
+
+Master chat can **register additional capabilities** with a stable ID, description, and relative `media/` or `libraries/` path. Registering changes the versioned architecture definition; the directory is created only when a project requests that capability. Existing IDs and paths cannot be repointed implicitly. The starter schema supports up to 32 capabilities. Changes to the core layout require an explicit schema migration; editing it incompatibly pauses provisioning.
+
+Runtime bindings, genre associations, personal labels and provisioning events stay in the private SQLite registry. The source scaffold contains no absolute runtime paths or artist/album labels. Source scaffolds and capability-definition changes are left for normal explicit Git checkpoints. Archives and source rebuilds do not delete belongings. Back up the belongings tree and private registry separately; the source Git repository does not back them up.
+
+Model tools `read_architecture` and `plan_storage` inspect scoped bindings and propose plans without changing files. The UI and CLI perform provisioning. Master can inspect all workspace bindings; focused chats see their descendants' bindings. Reusing storage is an explicit attachment by the user. These are logical ownership and context boundaries within one local OS account, **not container filesystem isolation**. Container execution, image builds, filesystem mounts, automatic migrations, importing existing libraries, and semantic classification are not implemented by this storage feature.
+
+```sh
+hotbox architecture init --category 1
+hotbox architecture catalog --category 1
+hotbox architecture define --category 1 --id documents --relative-path libraries/documents --description "Shared documents"
+hotbox architecture plan --category PROJECT_ID --capabilities music,album-covers --artist "Example Band" --album "Example Album" --genre "Rock"
+hotbox architecture ensure --category PROJECT_ID --capabilities music,album-covers --artist "Example Band" --album "Example Album" --genre "Rock"
+```
+
+`init` accepts `--tool-root` and `--runtime-root` for separate absolute locations outside existing Git repositories. Roots must initially be empty; symlinks, overlapping roots and roots containing the private database are rejected. Roots cannot be changed after initialization through this API. Paths from templates are validated before use. A local lock serializes registry mutations. On an I/O failure, already created directories remain in place; provisioning can be retried after the underlying problem is resolved. Hotbox never deletes directories to roll back an error.

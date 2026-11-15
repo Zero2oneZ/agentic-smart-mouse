@@ -22,3 +22,10 @@ Reusable segments retain original redacted text artifacts separately from derive
 results and summaries. Never execute stored scripts automatically. Queue workers
 must use valid, unexpired leases to finish or fail jobs. Preserve workspace
 scoping and explicit segment grants when retrieving or composing context.
+
+Shared architecture tests must use temporary tool and belongings roots. Keep the
+user/runtime tree outside the development Git repository. Register stable library
+capabilities before provisioning; never repoint existing capabilities, move media,
+or overwrite user files implicitly. Model architecture tools are read-only. The
+storage registry is not a container sandbox; do not claim isolation or launch
+containers through stored metadata. Preserve scoped bindings and lazy creation.

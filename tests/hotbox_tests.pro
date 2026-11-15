@@ -12,3 +12,6 @@ SOURCES += ../src/sessionledger.cpp ../src/gitworkspace.cpp
 
 HEADERS += ../src/segmentstore.h
 SOURCES += ../src/segmentstore.cpp
+
+HEADERS += ../src/architecturestore.h
+SOURCES += ../src/architecturestore.cpp
