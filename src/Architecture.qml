@@ -29,6 +29,17 @@ ScrollView {
   Label {text:qsTr("Build from a shared template. Keep application source in the development Git tree and personal files in a separate belongings tree. Attach existing storage across projects without copying it.");wrapMode:Text.Wrap;Layout.fillWidth:true;color:"#aeb9c9"}
   Label {text:qsTr("Storage foundation · container execution is not configured");color:"#f1d99b";wrapMode:Text.Wrap;Layout.fillWidth:true}
   GroupBox {
+  title:qsTr("Runtime and data locations");Layout.fillWidth:true
+  ColumnLayout {anchors.fill:parent
+   property var report:{var registry=root.registry;return backend.runtimeReport()}
+   Label {text:parent.report.databaseOk?qsTr("Private database check passed"):qsTr("Private database needs attention");Layout.fillWidth:true;wrapMode:Text.Wrap}
+   Repeater {model:parent.report.storage||[]
+    delegate:Label {required property var modelData;Layout.fillWidth:true;wrapMode:Text.Wrap;textFormat:Text.PlainText;text:modelData.name+"\n"+modelData.path;color:"#aeb9c9"}
+   }
+   Label {text:qsTr("Agent terminals show output. Interactive terminal attachment is not connected.");Layout.fillWidth:true;wrapMode:Text.Wrap;color:"#9198a6"}
+  }
+ }
+ GroupBox {
    title:root.registry.initialized?qsTr("Architecture roots"):qsTr("Initialize architecture from master chat")
    Layout.fillWidth:true
    ColumnLayout {

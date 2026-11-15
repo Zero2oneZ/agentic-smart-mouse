@@ -22,3 +22,14 @@ SOURCES += src/taskservice.cpp
 
 HEADERS += src/demonstrations.h
 SOURCES += src/demonstrations.cpp
+
+SOURCES += src/wheel.cpp
+
+HEADERS += src/agentservice.h
+SOURCES += src/agentservice.cpp
+
+SOURCES += src/feedidentity.cpp
+
+SOURCES += src/activityfeed.cpp
+
+SOURCES += src/runtime.cpp

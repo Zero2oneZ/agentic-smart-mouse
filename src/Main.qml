@@ -16,7 +16,7 @@ ApplicationWindow {
  property bool helpVisible: false
  property bool moreOptions: false
  onClosing: function(close) { close.accepted = allowClose; if (!allowClose) hide() }
- Shortcut { sequence: "?"; context: Qt.ApplicationShortcut; enabled: !composer.activeFocus&&!keypad.visible&&win.page!=="tasks"&&win.page!=="recordings"; onActivated: help.open() }
+ Shortcut { sequence: "?"; context: Qt.ApplicationShortcut; enabled: !composer.activeFocus&&!backend.expanded&&win.page!=="tasks"&&win.page!=="recordings"; onActivated: help.open() }
  Shortcut { sequence: "Ctrl+K"; context: Qt.ApplicationShortcut; onActivated: {win.page="bindings";backend.refreshBindings();bindingSearch.forceActiveFocus()} }
  Shortcut { sequence: "Ctrl+N"; context: Qt.ApplicationShortcut; onActivated: {win.page="tasks";tasksView.newTask()} }
  Shortcut { sequence: "Ctrl+,"; context: Qt.ApplicationShortcut; onActivated: settings.open() }
@@ -33,12 +33,13 @@ ApplicationWindow {
  function reveal() {show();raise();requestActivate()}
  Connections {
   target:backend
+  function onShowAgent(view){if(view==="prompt"){backend.preview();overlay.openAgentPrompt()}else{win.page="agents";win.reveal()}}
   function onShowChat(){win.page="chat";win.reveal();composer.forceActiveFocus()}
-  function onShowKeypad(){win.reveal();keypad.open()}
+  function onShowKeypad(){backend.preview()}
   function onShowTasks(view){win.page="tasks";win.reveal();if(view==="task")tasksView.newTask();if(backend.tasks)backend.tasks.refresh()}
   function onShowBindings(){win.page="bindings";win.reveal();bindingSearch.forceActiveFocus()}
   function onCreateRequested(parent){win.reveal();win.editCategory(-1,parent)}
-  function onChanged(){Qt.callLater(function(){feed.positionViewAtEnd()})}
+  function onChanged(){if(feed.followTail)Qt.callLater(function(){feed.goLatest()})}
  }
  Item {
   anchors.fill:parent
@@ -53,7 +54,8 @@ ApplicationWindow {
       Label {text:"hotbox";font.pixelSize:27;font.weight:Font.DemiBold;Layout.fillWidth:true}
       Label {text:"●";color:theme.accent;font.pixelSize:18}
      }
-     Button {text:qsTr("Keyboard controls");Layout.fillWidth:true;onClicked:keypad.open()}
+     Button {text:qsTr("Mouse Hotbox");Layout.fillWidth:true;onClicked:backend.launch("keypad")}
+     Button {text:qsTr("Agents");Layout.fillWidth:true;onClicked:win.page="agents"}
      Button {text:qsTr("Teach a helper");Layout.fillWidth:true;flat:true;onClicked:win.page="recordings"}
      Button {text:qsTr("New task");Layout.fillWidth:true;onClicked:{win.page="tasks";tasksView.newTask()}}
      Button {text:qsTr("Activity");Layout.fillWidth:true;flat:true;onClicked:{win.page="tasks";if(backend.tasks)backend.tasks.refresh()}}
@@ -89,11 +91,12 @@ ApplicationWindow {
    ColumnLayout {
     Layout.fillWidth:true;Layout.fillHeight:true;spacing:0
     Rectangle {
-     Layout.fillWidth:true;Layout.preferredHeight:88;color:"#15181e"
+     Layout.fillWidth:true;Layout.preferredHeight:win.page==="chat"?112:88;color:"#15181e"
      RowLayout {
       anchors.fill:parent;anchors.margins:22
       ColumnLayout {Layout.fillWidth:true;spacing:5
-       Label {text:win.page==="recordings"?qsTr("Teach a helper"):win.page==="tasks"?qsTr("Activity"):win.page==="architecture"?qsTr("Files and storage"):win.page==="segments"?qsTr("Saved work"):win.page==="timeline"?qsTr("History"):(win.page==="bindings"?qsTr("Omarchy keybindings"):backend.title);font.pixelSize:22;font.weight:Font.DemiBold}
+       Label {visible:win.page==="chat";text:qsTr("%1  ·  %2").arg(backend.feedIdentity.mark).arg(backend.feedIdentity.route);textFormat:Text.PlainText;color:backend.feedIdentity.color;font.pixelSize:11;Layout.fillWidth:true;elide:Text.ElideMiddle}
+       Label {text:win.page==="agents"?qsTr("Agents"):win.page==="recordings"?qsTr("Teach a helper"):win.page==="tasks"?qsTr("Activity"):win.page==="architecture"?qsTr("Files and storage"):win.page==="segments"?qsTr("Saved work"):win.page==="timeline"?qsTr("History"):(win.page==="bindings"?qsTr("Omarchy keybindings"):backend.title);font.pixelSize:22;font.weight:Font.DemiBold}
        Label {text:win.page==="tasks"?qsTr("Your tasks, progress, and results"):win.page==="bindings"?qsTr("Search shortcuts from your current desktop configuration"):(backend.folder||qsTr("Persistent conversation · local memory"));color:"#9198a6";font.pixelSize:12;elide:Text.ElideMiddle;Layout.fillWidth:true}
       }
       Button {visible:win.page==="chat";text:qsTr("Project brief");onClicked:win.editCategory(backend.currentId,0)}
@@ -105,39 +108,33 @@ ApplicationWindow {
     ColumnLayout {
      visible:win.page==="chat";Layout.fillHeight:true;Layout.fillWidth:true;spacing:0
      Rectangle {
-      visible:backend.brief.length>0;Layout.fillWidth:true;Layout.preferredHeight:Math.min(100,briefLabel.implicitHeight+28);color:"#1a2027"
-      Label {id:briefLabel;anchors.fill:parent;anchors.margins:14;text:qsTr("PROJECT MEMORY  ·  %1").arg(backend.brief);wrapMode:Text.Wrap;color:"#aeb9c9";font.pixelSize:12;maximumLineCount:4;elide:Text.ElideRight}
+      property bool opened:false
+      property int scope:backend.currentId
+      onScopeChanged:opened=false
+      visible:backend.brief.length>0;Layout.fillWidth:true;Layout.preferredHeight:opened?Math.min(160,briefLabel.implicitHeight+60):42;color:"#1a2027"
+      Button {id:briefToggle;anchors.left:parent.left;anchors.right:parent.right;height:40;flat:true;text:(parent.opened?"⌄  ":">  ")+qsTr("Project memory");onClicked:parent.opened=!parent.opened}
+      Label {id:briefLabel;visible:parent.opened;anchors.left:parent.left;anchors.right:parent.right;anchors.top:briefToggle.bottom;anchors.margins:12;text:backend.brief;textFormat:Text.PlainText;wrapMode:Text.Wrap;color:"#aeb9c9";font.pixelSize:12;maximumLineCount:4;elide:Text.ElideRight}
      }
+
      Item {
       Layout.fillWidth:true;Layout.fillHeight:true
       Column {
-       visible:backend.messages.length===0;anchors.centerIn:parent;width:Math.min(parent.width-60,520);spacing:16
+       visible:false;anchors.centerIn:parent;width:Math.min(parent.width-60,520);spacing:16
        Label {text:"◎";font.pixelSize:50;color:theme.accent;anchors.horizontalCenter:parent.horizontalCenter}
        Label {text:qsTr("A place to pick up where you left off.");font.pixelSize:24;wrapMode:Text.Wrap;width:parent.width;horizontalAlignment:Text.AlignHCenter}
        Label {text:qsTr("Keep a conversation, project location, and living brief together. Add a category from the sidebar or the hotbox.");color:"#9198a6";font.pixelSize:14;wrapMode:Text.Wrap;width:parent.width;horizontalAlignment:Text.AlignHCenter}
       }
-      ListView {
-       id:feed;anchors.fill:parent;anchors.margins:22;clip:true;spacing:16;model:backend.messages
-       ScrollBar.vertical:ScrollBar {}
-       delegate:Item {
-        required property var modelData
-        width:feed.width;height:messageColumn.implicitHeight+30
-        Rectangle {anchors.fill:parent;color:modelData.role==="user"?"#202631":"#171b22";radius:theme.radius}
-        ColumnLayout {
-         id:messageColumn;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:15;spacing:9
-         Label {text:modelData.role==="user"?qsTr("YOU"):qsTr("ASSISTANT");font.pixelSize:10;font.letterSpacing:1.4;color:modelData.role==="user"?"#a9b2c3":theme.accent}
-         TextEdit {Layout.fillWidth:true;readOnly:true;selectByMouse:true;text:modelData.content||qsTr("Thinking…");textFormat:TextEdit.PlainText;wrapMode:TextEdit.Wrap;color:"#e4e7ed";font.pixelSize:15}
-        }
-       }
-      }
+      ActivityFeed {id:feed;anchors.fill:parent;anchors.margins:22}
      }
+
+     Button {visible:!feed.followTail;text:qsTr("Jump to latest");Layout.alignment:Qt.AlignRight;onClicked:{feed.followTail=true;feed.goLatest()}}
      Rectangle {
       Layout.fillWidth:true;Layout.preferredHeight:Math.min(190,Math.max(115,composer.contentHeight+65));Layout.margins:22;Layout.topMargin:0;color:"#20252e";border.color:composer.activeFocus?theme.accent:"#353c49";radius:theme.radius
       ColumnLayout {
        anchors.fill:parent;anchors.margins:12;spacing:5
        ScrollView {
         Layout.fillWidth:true;Layout.fillHeight:true
-        TextArea {id:composer;placeholderText:qsTr("Message this workspace…");wrapMode:TextArea.Wrap;background:null;selectByMouse:true
+        TextArea {id:composer;placeholderText:qsTr("Message %1…").arg(backend.feedIdentity.label);wrapMode:TextArea.Wrap;background:null;selectByMouse:true
          Keys.onReturnPressed:function(event){if(!(event.modifiers&Qt.ShiftModifier)){if(!backend.busy&&text.trim().length){backend.send(text);text=""}event.accepted=true}else event.accepted=false}
         }
        }
@@ -173,6 +170,7 @@ ApplicationWindow {
      Button {text:qsTr("Pause");onClicked:backend.recorder.togglePause()}
      Button {text:qsTr("Finish");onClicked:{backend.recorder.stop();win.page="recordings"}}
     }
+    Agents {id:agentView;visible:win.page==="agents";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
     Recordings {id:recordingsView;visible:win.page==="recordings";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
     Tasks {id:tasksView;visible:win.page==="tasks";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:22}
     Segments {objectName:"segmentsView";visible:win.page==="segments";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
@@ -226,6 +224,6 @@ ApplicationWindow {
  Dialog {id:help;anchors.centerIn:parent;width:520;modal:true;title:qsTr("Hotbox controls");standardButtons:Dialog.Close
   Label {width:parent.width;wrapMode:Text.Wrap;text:qsTr("Hold Ctrl + Super for 0.3 seconds to spread the menu at your pointer. Release either key to retract. Click an item to choose; right-click for deeper options. Double-click the center for master chat.\n\nCtrl+K: search keybindings\nCtrl+N: new task\nCtrl+,: model settings\nCtrl+Q: quit Hotbox\n?: this help\n\nThe Preview hotbox button opens a click-controlled preview. Click the background to dismiss it.")}
  }
- Keypad {id:keypad;owner:win}
+
  Hotbox {id:overlay;objectName:"hotboxOverlay";owner:win}
 }

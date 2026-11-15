@@ -1,5 +1,6 @@
 #pragma once
 #include "architecturestore.h"
+#include "agentservice.h"
 #include "segmentstore.h"
 #include "sessionledger.h"
 #include "taskservice.h"
@@ -18,6 +19,9 @@
 
 class Backend : public QObject {
     Q_OBJECT
+    Q_PROPERTY(QVariantMap feedIdentity READ feedIdentity NOTIFY changed)
+    Q_PROPERTY(AgentService *agents READ agents CONSTANT)
+    Q_PROPERTY(QVariantMap deck READ deck NOTIFY deckChanged)
     Q_PROPERTY(Demonstrations *recorder READ recorder CONSTANT)
     Q_PROPERTY(QVariantList keypadControls READ keypadControls CONSTANT)
     Q_PROPERTY(int quickIndex READ quickIndex WRITE setQuickIndex NOTIFY quickChanged)
@@ -44,6 +48,21 @@ class Backend : public QObject {
   public:
     explicit Backend(const QString &directory = {}, QObject *parent = nullptr, bool automaticTasks = true);
     ~Backend() override;
+    Q_INVOKABLE QVariantList activityPage(qint64 before=0) const;
+    Q_INVOKABLE QVariantMap activityDetail(qint64 id,int offset=0) const;
+    Q_INVOKABLE QVariantMap runtimeReport() const;
+    QVariantMap feedIdentity() const;
+    Q_INVOKABLE QVariantMap identifyFeed(int category,const QStringList &path,const QString &spread,const QString &action,bool remember=false);
+    AgentService *agents() const { return m_agents.get(); }
+    Q_INVOKABLE void openAgent(const QString &id, const QString &view);
+    QVariantMap deck() const { return m_deck; }
+    Q_INVOKABLE QVariantList wheelItems(const QString &group) const;
+    Q_INVOKABLE bool markWheel(const QString &action, int category, const QString &group, bool enabled);
+    Q_INVOKABLE void touchWheel(const QString &action, int category);
+    Q_INVOKABLE bool prepareDeck(const QString &prompt, bool includeRecording);
+    Q_INVOKABLE bool openDeck(const QString &provider = QString());
+    Q_INVOKABLE void latchMenu() { m_menuLatched = true; }
+    Q_INVOKABLE void closeMenu() { m_menuLatched = false; release(); }
     Demonstrations *recorder() const { return m_recorder.get(); }
     QVariantList keypadControls() const;
     int quickIndex() const;
@@ -111,6 +130,8 @@ class Backend : public QObject {
     QVariantMap contextTool(const QString &name, const QVariantMap &arguments, int scope = 0);
 
   signals:
+    void showAgent(const QString &view);
+    void deckChanged();
     void changed();
     void activityChanged();
     void statusChanged();
@@ -137,6 +158,7 @@ class Backend : public QObject {
     void collectTools(const QJsonObject &delta);
     QJsonArray toolDefinitions() const;
     void gitTask(const QString &operation, int category);
+    std::unique_ptr<AgentService> m_agents;
     std::unique_ptr<Demonstrations> m_recorder;
     std::unique_ptr<TaskService> m_tasks;
     std::unique_ptr<SessionLedger> m_ledger;
@@ -157,6 +179,8 @@ class Backend : public QObject {
     bool m_cancelled = false;
 
     QSqlDatabase m_db;
+    QVariantMap m_deck;
+    bool m_menuLatched = false;
     QString m_connection, m_directory, m_status;
     int m_current = 1, m_replyCategory = 1, m_replyMessage = 0;
     QTimer m_hold;

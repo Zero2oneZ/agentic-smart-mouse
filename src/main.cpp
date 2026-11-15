@@ -43,10 +43,22 @@ int main(int argc, char **argv) {
     }();
     const bool check = raw.contains("check"), smoke = raw.contains("--smoke");
     const QString commandName = raw.value(0, "open");
+    QString agentCommand;
+    if(commandName=="agent-ui" && raw.size()>=3 && QRegularExpression("^[a-f0-9]{32}$").match(raw[1]).hasMatch() && QStringList{"chat","terminal","prompt"}.contains(raw[2]))
+        agentCommand="agent-ui:"+raw[1]+":"+raw[2];
+    if(QStringList{"hold","release","quit"}.contains(commandName)) {
+        QCoreApplication control(argc,argv);
+        QCoreApplication::setApplicationName("hotbox");
+        QLocalSocket socket;socket.connectToServer(QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation)+"/hotbox-ipc");
+        if(!socket.waitForConnected(300)) {QTextStream(stderr)<<"Hotbox is not reachable: "<<socket.errorString()<<'\n';return 1;}
+        socket.write(commandName.toUtf8()+"\n");
+        if(!socket.waitForBytesWritten(1000))return 1;
+        return 0;
+    }
     const bool headless = QStringList{"events",   "read-event", "attach", "record",     "focus",
                                       "snapshot", "branch",     "sync",   "git-config", "run"}
                               .contains(commandName) ||
-                          commandName == "segment" || commandName == "architecture";
+                          commandName == "doctor" || commandName == "segment" || commandName == "architecture";
     if (check || smoke || headless) {
         qputenv("QT_QPA_PLATFORM", "offscreen");
         qputenv("QT_QPA_PLATFORMTHEME", "");
@@ -80,7 +92,7 @@ int main(int argc, char **argv) {
     if (!smoke && !check && !headless) {
         client.connectToServer(serverPath);
         if (client.waitForConnected(150)) {
-            client.write(command.toUtf8() + "\n");
+            client.write((agentCommand.isEmpty()?command:agentCommand).toUtf8() + "\n");
             client.waitForBytesWritten(500);
             return 0;
         }
@@ -104,7 +116,9 @@ int main(int argc, char **argv) {
         }
         QJsonObject result;
         int exitCode = 0;
-        if (command == "architecture") {
+        if(command=="doctor") {
+            result=QJsonObject::fromVariantMap(backend.runtimeReport());
+        } else if (command == "architecture") {
             QString action = "catalog";
             for (int i = 1; i < options.size(); ++i) {
                 if (options[i].startsWith("--")) {
@@ -381,8 +395,10 @@ int main(int argc, char **argv) {
             screen = app.primaryScreen();
         if (!screen)
             return;
-        if (layer)
+        if (layer) {
             layer->setScreen(screen);
+            layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
+        }
         menu->setScreen(screen);
         QRect geometry = screen->geometry();
         menu->setGeometry(geometry);
@@ -390,9 +406,17 @@ int main(int argc, char **argv) {
         menu->setProperty("anchorY", qBound(12, pos.y() - geometry.y(), geometry.height() - 12));
         QMetaObject::invokeMethod(menu, "resetMenu");
         menu->show();
+        menu->requestActivate();
+    });
+    QObject::connect(&backend, &Backend::expandedChanged, &app, [&] {
+        if (layer && !backend.expanded())
+            layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
     });
     auto handle = [&](const QString &cmd) {
-        if (cmd == "hold")
+        if(cmd.startsWith("agent-ui:")) {
+            auto parts=cmd.split(':');
+            if(parts.size()==3 && QRegularExpression("^[a-f0-9]{32}$").match(parts[1]).hasMatch())backend.openAgent(parts[1],parts[2]);
+        } else if (cmd == "hold")
             backend.hold();
         else if (cmd == "release")
             backend.release();
@@ -401,7 +425,9 @@ int main(int argc, char **argv) {
         else if (cmd == "quit") {
             mainWindow->setProperty("allowClose", true);
             app.quit();
-        } else if (cmd == "keybindings")
+        } else if (cmd == "keypad")
+            backend.launch("keypad");
+        else if (cmd == "keybindings")
             backend.launch("keybindings");
         else if (cmd == "open")
             backend.launch("activity");
@@ -495,6 +521,6 @@ int main(int argc, char **argv) {
             QTextStream(stdout) << QJsonDocument(result).toJson(QJsonDocument::Compact) << '\n';
         });
     } else if (command != "daemon")
-        QTimer::singleShot(0, &app, [&] { handle(command); });
+        QTimer::singleShot(0, &app, [&] { handle(agentCommand.isEmpty()?command:agentCommand); });
     return app.exec();
 }

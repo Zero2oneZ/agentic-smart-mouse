@@ -45,10 +45,19 @@ Backend::Backend(const QString &directory, QObject *parent, bool automaticTasks)
         "CREATE TABLE IF NOT EXISTS workspace_git(category INTEGER PRIMARY KEY REFERENCES categories(id), "
         "folder TEXT NOT NULL, branch TEXT NOT NULL, paths TEXT NOT NULL DEFAULT '', remote TEXT NOT NULL "
         "DEFAULT '', automatic INTEGER NOT NULL DEFAULT 0, push INTEGER NOT NULL DEFAULT 0)");
+    execute("CREATE TABLE IF NOT EXISTS wheel_items(action TEXT NOT NULL,category INTEGER NOT NULL,"
+            "favorite INTEGER NOT NULL DEFAULT 0,pinned INTEGER NOT NULL DEFAULT 0,used INTEGER NOT NULL DEFAULT 0,"
+            "PRIMARY KEY(action,category))");
+    execute("CREATE TABLE IF NOT EXISTS feed_origins(category INTEGER PRIMARY KEY REFERENCES categories(id),document TEXT NOT NULL)");
+    execute("CREATE TABLE IF NOT EXISTS message_origins(message INTEGER PRIMARY KEY REFERENCES messages(id),document TEXT NOT NULL)");
+    execute("CREATE TABLE IF NOT EXISTS event_origins(event INTEGER PRIMARY KEY REFERENCES events(id),document TEXT NOT NULL)");
+    m_agents = std::make_unique<AgentService>(m_db,m_directory,automaticTasks);
     m_recorder = std::make_unique<Demonstrations>(m_db, automaticTasks);
     m_tasks = std::make_unique<TaskService>(m_directory, automaticTasks);
     connect(m_tasks.get(), &TaskService::demonstrated, this, [this](const QString &code, const QString &label){ if(m_recorder)m_recorder->action(code,label); });
     m_ledger = std::make_unique<SessionLedger>(m_db);
+    connect(m_agents.get(),&AgentService::capturedEvent,this,[this](int category,const QString &kind,const QString &summary,const QString &content,const QString &source){recordEvent(category>0?category:1,kind,summary,content,source);});
+    connect(m_tasks.get(),&TaskService::demonstrated,this,[this](const QString &,const QString &label){recordEvent(m_current,"task.requested",label,label,"local task");});
     m_architecture = std::make_unique<ArchitectureStore>(m_db, *m_ledger, m_directory);
     m_segments = std::make_unique<SegmentStore>(m_db, *m_ledger);
     m_segmentPoll.setInterval(5000);
@@ -156,6 +165,7 @@ Backend::~Backend() {
     m_activityPoll.stop();
     m_gitTask.waitForFinished();
     m_segmentPoll.stop();
+    m_agents.reset();
     m_recorder.reset();
     m_tasks.reset();
     m_segments.reset();
@@ -219,12 +229,12 @@ QVariantList Backend::children(int parent) const {
 QVariantList Backend::messages() const {
     QVariantList list;
     QSqlQuery q(m_db);
-    q.prepare("SELECT id,role,content,created FROM messages WHERE category=? ORDER BY id");
+    q.prepare("SELECT m.id,m.role,m.content,m.created,o.document FROM messages m LEFT JOIN message_origins o ON o.message=m.id WHERE m.category=? ORDER BY m.id");
     q.addBindValue(m_current);
     q.exec();
     while (q.next())
         list.append(QVariantMap{
-            {"id", q.value(0)}, {"role", q.value(1)}, {"content", q.value(2)}, {"created", q.value(3)}});
+            {"id", q.value(0)}, {"role", q.value(1)}, {"content", q.value(2)}, {"created", q.value(3)}, {"origin",QJsonDocument::fromJson(q.value(4).toByteArray()).object().toVariantMap()}});
     return list;
 }
 void Backend::select(int id) {
@@ -332,6 +342,7 @@ int Backend::append(int category, const QString &role, const QString &content) {
         return 0;
     }
     int message = q.lastInsertId().toInt();
+    QSqlQuery origin(m_db);origin.prepare("INSERT INTO message_origins(message,document) SELECT ?,document FROM feed_origins WHERE category=?");origin.addBindValue(message);origin.addBindValue(category);origin.exec();
     if (!content.isEmpty())
         recordEvent(category, "chat." + role, content.left(160), content,
                     "message:" + QString::number(message));
@@ -386,6 +397,7 @@ void Backend::startReply() {
             return;
         }
     }
+    recordEvent(m_replyCategory,"context.loaded",tr("Loaded model request context"),QString::fromUtf8(QJsonDocument(m_context).toJson()),"model request");
     QNetworkRequest request{QUrl(endpoint())};
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setTransferTimeout(120000);
@@ -434,12 +446,14 @@ void Backend::startReply() {
                 auto function = call["function"].toObject();
                 QJsonParseError parseError;
                 auto parsed = QJsonDocument::fromJson(function["arguments"].toString().toUtf8(), &parseError);
+                recordEvent(m_replyCategory,"tool.before",tr("Before tool: %1").arg(function["name"].toString()),function["arguments"].toString(),call["id"].toString());
                 QVariantMap result;
                 if (parseError.error != QJsonParseError::NoError || !parsed.isObject())
                     result = {{"error", "Invalid tool arguments"}};
                 else
                     result = contextTool(function["name"].toString(), parsed.object().toVariantMap(),
                                          m_replyCategory);
+                recordEvent(m_replyCategory,"tool.result",tr("Tool result: %1").arg(function["name"].toString()),QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(result)).toJson()),call["id"].toString());
                 m_context.append(QJsonObject{
                     {"role", "tool"},
                     {"tool_call_id", call["id"]},
@@ -537,15 +551,16 @@ void Backend::refreshBindings() {
     m_bindingProcess.start("omarchy", {"menu", "keybindings", "--print"});
 }
 void Backend::launch(const QString &action, int id) {
-    release();
+    closeMenu();
     if (id < 0)
         id = m_current;
+    if (action != "keypad") touchWheel(action, id);
     if (m_recorder && action != "keypad") {
         const QMap<QString,QString> labels{{"folder",tr("Open project folder")},{"browser",tr("Open browser")},{"terminal",tr("Open project terminal")},{"chat",tr("Open chat")},{"task",tr("Open a new local task")},{"activity",tr("Open Activity")},{"keybindings",tr("Open shortcuts")}};
         m_recorder->action(action, labels.value(action,action));
     }
     if (action == "keypad") {
-        emit showKeypad();
+        preview();
     } else if (action == "task" || action == "activity") {
         emit showTasks(action);
     } else if (action == "folder") {
@@ -594,6 +609,7 @@ void Backend::hold() {
     m_hold.start();
 }
 void Backend::release() {
+    if (m_menuLatched) return;
     m_held = false;
     m_hold.stop();
     if (m_expanded) {
@@ -609,7 +625,8 @@ void Backend::preview() {
     emit showMenu();
 }
 void Backend::openChat(int id) {
-    release();
+    closeMenu();
+    touchWheel("chat", id);
     select(id);
     emit showChat();
 }
@@ -626,6 +643,7 @@ qint64 Backend::recordEvent(int category, const QString &kind, const QString &su
     if (!m_ledger || field(category, "name").isEmpty())
         return 0;
     auto id = m_ledger->record(category, kind, summary, content, source);
+    if(id){QSqlQuery origin(m_db);origin.prepare("INSERT INTO event_origins(event,document) SELECT ?,document FROM feed_origins WHERE category=?");origin.addBindValue(id);origin.addBindValue(category);origin.exec();}
     emit activityChanged();
     return id;
 }
@@ -1152,4 +1170,10 @@ QVariantList Backend::keypadControls() const {
     QFile file(":/numpad.json");
     if(!file.open(QIODevice::ReadOnly))return {};
     return QJsonDocument::fromJson(file.readAll()).object()["controls"].toArray().toVariantList();
+}
+
+void Backend::openAgent(const QString &id,const QString &view) {
+    if(!m_agents->select(id)) {setStatus(tr("Agent run not found."));return;}
+    if(view=="terminal") {if(!m_agents->terminal(id))setStatus(tr("Could not open the output terminal."));return;}
+    closeMenu();emit showAgent(view=="prompt"?"prompt":"chat");
 }

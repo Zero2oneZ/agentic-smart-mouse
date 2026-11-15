@@ -89,8 +89,13 @@ QVariantMap GitWorkspace::checkpoint(const QString &folder, const QString &branc
         QString::fromLatin1(QCryptographicHash::hash(identity.toUtf8(), QCryptographicHash::Sha256).toHex()) +
         ".lock");
     lock.setStaleLockTime(0);
-    if (!lock.tryLock())
+    if (!lock.tryLock()) {
+        if(lock.error()==QLockFile::PermissionError)
+            return error("Cannot create checkpoint lock in the runtime directory: " + lockRoot);
+        if(lock.error()!=QLockFile::LockFailedError)
+            return error("Could not acquire the checkpoint lock: " + lockRoot);
         return error("Another checkpoint is already running for this worktree");
+    }
     auto current = git(folder, {"symbolic-ref", "--short", "HEAD"});
     if (!current.ok || current.text != branch)
         return error("Worktree branch changed; background Git paused");

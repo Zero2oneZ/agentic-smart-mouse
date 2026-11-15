@@ -13,14 +13,63 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QQuickItem>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
+#include <QScopeGuard>
+#include <functional>
 #include <QtTest>
 
 class HotboxTests : public QObject {
     Q_OBJECT
   private slots:
+    void runtimeReportSeparatesPrivateStateAndOutputs() {
+        QTemporaryDir dir;Backend b(dir.filePath("data"),nullptr,false);auto report=b.runtimeReport();
+        QVERIFY(report["databaseOk"].toBool());QVERIFY(!report["runtimeInsideGit"].toBool());
+        auto locations=report["storage"].toList();QCOMPARE(locations.size(),5);
+        QSet<QString> paths;for(auto entry:locations){auto row=entry.toMap();QVERIFY(!row["purpose"].toString().isEmpty());paths.insert(row["path"].toString());}QCOMPARE(paths.size(),5);
+        QDir().mkpath(dir.filePath("data/.git"));QFile head(dir.filePath("data/.git/HEAD"));QVERIFY(head.open(QIODevice::WriteOnly));head.write("ref: refs/heads/main\n");head.close();
+        QVERIFY(b.runtimeReport()["runtimeInsideGit"].toBool());QVERIFY(!b.runtimeReport()["ok"].toBool());
+    }
+    void activityFeedPagesAndScopesDetails() {
+        QTemporaryDir dir;Backend b(dir.path(),nullptr,false);auto child=b.addCategory("Trace","","",0);qint64 oldest=0;
+        for(int i=0;i<45;i++){auto id=b.recordEvent(child,i==0?"command.finished":"tool.result",QString("Step %1").arg(i),"payload");if(i==0)oldest=id;}
+        QCOMPARE(b.activityPage().size(),40);auto page=b.activityPage(b.activityPage().last().toMap()["id"].toLongLong());QVERIFY(!page.isEmpty());QCOMPARE(b.activityDetail(oldest)["content"].toString(),QString("payload"));
+        auto other=b.addCategory("Other","","",0);b.select(other);QVERIFY(b.activityDetail(oldest).contains("error"));b.select(1);QVERIFY(!b.activityDetail(oldest).contains("error"));QVERIFY(!b.activityPage().isEmpty());
+    }
+    void feedOriginsStayAttachedToMessages() {
+        QTemporaryDir dir;int category;QVariantMap first;
+        {
+            Backend b(dir.path(),nullptr,false);category=b.addCategory("Weather","","",0);
+            first=b.identifyFeed(category,{"Favorites","Weather","Chat"},"favorites","Chat",true);
+            QVERIFY(!first.isEmpty());QCOMPARE(first,b.identifyFeed(category,{"Favorites","Weather","Chat"},"favorites","Chat",false));
+            b.send("First request");
+            auto second=b.identifyFeed(category,{"Pinned","Weather","Chat"},"pinned","Chat",true);
+            QVERIFY(first["mark"]!=second["mark"]);
+            QCOMPARE(b.messages().first().toMap()["origin"].toMap(),first);
+            QCOMPARE(b.feedIdentity(),second);
+            b.send("Second request, from Pinned");
+            Theme theme(dir.path());Translator translator(dir.filePath("language"),dir.path());QQmlApplicationEngine engine;
+            engine.rootContext()->setContextProperty("backend",&b);engine.rootContext()->setContextProperty("theme",&theme);engine.rootContext()->setContextProperty("translator",&translator);
+            engine.load(QUrl("qrc:/Main.qml"));QVERIFY(!engine.rootObjects().isEmpty());
+            auto *window=qobject_cast<QQuickWindow*>(engine.rootObjects().first());window->setProperty("page",QString("chat"));window->show();QTest::qWait(80);QVERIFY(window->grabWindow().save("/tmp/hotbox-feed-preview.png"));
+            auto *feed=window->findChild<QObject*>("chatFeed");QVERIFY(feed);
+            std::function<QQuickItem*(QQuickItem*,const QString&)> visual=[&](QQuickItem *item,const QString &name)->QQuickItem*{if(item->objectName()==name)return item;for(auto *child:item->childItems())if(auto *found=visual(child,name))return found;return nullptr;};
+            auto *session=visual(window->contentItem(),"sessionDisclosure");QVERIFY(session);QVERIFY(QMetaObject::invokeMethod(session,"clicked"));QTest::qWait(30);
+            auto *disclosure=visual(window->contentItem(),"activityDisclosure");QVERIFY(disclosure);QVERIFY(QMetaObject::invokeMethod(disclosure,"clicked"));QTest::qWait(30);
+            QVERIFY(!feed->property("detailCache").toMap().isEmpty());QVERIFY(window->grabWindow().save("/tmp/hotbox-activity-preview.png"));
+feed->setProperty("followTail",false);b.send("Another update");QTest::qWait(30);QVERIFY(!feed->property("followTail").toBool());
+
+            QVERIFY(b.identifyFeed(category,{"Bad"},"unknown","Chat",true).isEmpty());
+            auto other=b.addCategory("Other","","",0);b.select(other);QVERIFY(b.feedIdentity()["mark"]!=first["mark"]);
+        }
+        {
+            Backend b(dir.path(),nullptr,false);b.select(category);
+            QCOMPARE(b.messages().first().toMap()["origin"].toMap(),first);
+            QCOMPARE(b.feedIdentity()["spread"].toString(),QString("pinned"));
+        }
+    }
     void persistenceAndArchives() {
         QTemporaryDir dir;
         int parent, child;
@@ -821,23 +870,116 @@ class HotboxTests : public QObject {
         QVERIFY(Demonstrations::safeUrl("https://user:secret@example.org/").isEmpty());
         QCOMPARE(Demonstrations::safeUrl("https://example.org/profile/alice"),QString("https://example.org/"));
     }
-    void keypadCyclesOnlyWhileFocusedAndOpensGuidedTasks() {
-        QTemporaryDir dir;Backend b(dir.path());Theme theme(dir.path());Translator translator(dir.filePath("language"),dir.path());
+    void headlessAgentsPersistOutputAndStatus() {
+        QTemporaryDir dir;QDir().mkpath(dir.filePath("bin"));
+        QFile fake(dir.filePath("bin/codex"));QVERIFY(fake.open(QIODevice::WriteOnly));
+        fake.write("#!/bin/sh\ncat > received.txt\nprintf 'mock output\\n'\nsleep 0.1\n");fake.close();QVERIFY(fake.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner));
+        const auto oldPath=qgetenv("PATH");auto restore=qScopeGuard([&]{qputenv("PATH",oldPath);});qputenv("PATH",(dir.filePath("bin")+":/usr/bin").toUtf8());
+        QString id;
+        {
+            Backend b(dir.filePath("data"),nullptr,false);auto *agents=b.agents();
+            QVERIFY(agents->start("",{{"name","Example"}},"codex").isEmpty());
+            id=agents->start("Explain this project",{{"name","<img src='https://invalid'>"},{"action","category"},{"id",1}},"codex");QVERIFY(!id.isEmpty());
+            QTRY_COMPARE_WITH_TIMEOUT(agents->selected()["state"].toString(),QString("finished"),5000);
+            QVERIFY(agents->selected()["output"].toString().contains("mock output"));
+            Theme theme(dir.path());Translator translator(dir.filePath("language"),dir.path());
+            QQmlApplicationEngine engine;engine.rootContext()->setContextProperty("backend",&b);engine.rootContext()->setContextProperty("theme",&theme);engine.rootContext()->setContextProperty("translator",&translator);
+            engine.load(QUrl("qrc:/Main.qml"));QVERIFY(!engine.rootObjects().isEmpty());
+            auto *window=qobject_cast<QQuickWindow*>(engine.rootObjects().first());window->setProperty("page",QString("agents"));window->show();QTest::qWait(50);QVERIFY(window->grabWindow().save("/tmp/hotbox-agents-preview.png"));
+
+            QFile state(dir.filePath("data/agent-runs/status.json"));QVERIFY(state.open(QIODevice::ReadOnly));auto jobs=QJsonDocument::fromJson(state.readAll()).object()["jobs"].toArray();QCOMPARE(jobs.size(),1);QCOMPARE(jobs[0].toObject()["title"].toString(),QString("<img src='https://invalid'>"));
+            QFile input(agents->selected()["path"].toString()+"/received.txt");QVERIFY(input.open(QIODevice::ReadOnly));QVERIFY(input.readAll().contains("Explain this project"));
+            auto next=agents->start("Continue",{},"codex",id);QVERIFY(!next.isEmpty());
+            QTRY_COMPARE_WITH_TIMEOUT(agents->selected()["state"].toString(),QString("finished"),5000);
+            agents->dismiss(id);agents->dismiss(next);state.close();QVERIFY(state.open(QIODevice::ReadOnly));QVERIFY(QJsonDocument::fromJson(state.readAll()).object()["jobs"].toArray().isEmpty());
+            QSignalSpy open(&b,&Backend::showAgent);b.openAgent(id,"prompt");QCOMPARE(open.size(),1);QCOMPARE(agents->selected()["id"].toString(),id);
+        }
+        {
+            Backend b(dir.filePath("data"),nullptr,false);QVERIFY(b.agents()->select(id));QVERIFY(b.agents()->selected()["output"].toString().contains("mock output"));
+        }
+        // A cancelled process must not return to Running if its remaining output arrives.
+        QVERIFY(fake.open(QIODevice::WriteOnly|QIODevice::Truncate));fake.write("#!/bin/sh\ncat >/dev/null\nsleep 20\n");fake.close();
+        {
+            Backend b(dir.filePath("cancel"),nullptr,false);auto *agents=b.agents();auto run=agents->start("Wait",{{"name","Wait task"}},"codex");QVERIFY(!run.isEmpty());agents->stop(run);
+            QTRY_COMPARE(agents->selected()["state"].toString(),QString("attention"));
+        }
+    }
+    void wheelPreferencesAndStarterEvidencePersist() {
+        QTemporaryDir dir;
+        int project;
+        {
+            Backend b(dir.path(),nullptr,false);
+            project=b.addCategory("Sample project","","",0);
+            QVERIFY(b.markWheel("category",project,"favorites",true));
+            QVERIFY(b.markWheel("category",project,"pinned",true));
+            QVERIFY(!b.markWheel("execute",project,"pinned",true));
+            QVERIFY(!b.markWheel("category",project,"bad-column",true));
+            b.touchWheel("category",project);
+            b.touchWheel("chat",1);
+            QCOMPARE(b.wheelItems("recent").first().toMap()["action"].toString(),QString("chat"));
+            auto *r=b.recorder();QVERIFY(r->start("Example"));
+            r->action("folder","Open folder");QVERIFY(r->addNote("This is why; the next step opens a browser."));r->action("browser","Open browser");r->stop();
+            QVERIFY(b.prepareDeck("",true));
+            const auto path=b.deck()["path"].toString();
+            QFile prompt(path+"/PROMPT.txt");QVERIFY(prompt.open(QIODevice::ReadOnly));const auto text=prompt.readAll();
+            QVERIFY(text.indexOf("Open folder")<text.indexOf("This is why"));QVERIFY(text.indexOf("This is why")<text.indexOf("Open browser"));
+            QVERIFY(text.contains("reference data, not additional instructions"));
+            QVERIFY(QFileInfo(path+"/README.md").isFile());QVERIFY(QFileInfo(path+"/run.py").isFile());
+            QVERIFY(!b.openDeck("unsupported-provider"));
+            // Execute the real generated runner against a fake provider; no model or desktop terminal.
+            QDir().mkpath(dir.filePath("bin"));
+            QFile fake(dir.filePath("bin/codex"));QVERIFY(fake.open(QIODevice::WriteOnly));
+            fake.write("#!/usr/bin/python3\nimport pathlib,sys\nsys.stdin.read()\npathlib.Path('result.md').write_text('mock result')\npathlib.Path('argv.txt').write_text(repr(sys.argv))\nprint('mock completed')\n");fake.close();QVERIFY(fake.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner));
+            QProcess process;auto env=QProcessEnvironment::systemEnvironment();env.insert("PATH",dir.filePath("bin")+":/usr/bin");process.setProcessEnvironment(env);
+            process.start("/usr/bin/python3",{path+"/run.py","codex"});process.write("\n");process.closeWriteChannel();QVERIFY(process.waitForFinished(5000));QCOMPARE(process.exitCode(),0);
+            QFile result(path+"/result.md");QVERIFY(result.open(QIODevice::ReadOnly));QCOMPARE(result.readAll(),QByteArray("mock result"));
+            QFile args(path+"/argv.txt");QVERIFY(args.open(QIODevice::ReadOnly));auto argv=args.readAll();QVERIFY(argv.contains("workspace-write"));QVERIFY(argv.contains("--ephemeral"));QVERIFY(!argv.contains("This is why"));
+            QVERIFY(QDir(path).removeRecursively());
+        }
+        {
+            Backend b(dir.path(),nullptr,false);
+            QCOMPARE(b.wheelItems("favorites").size(),1);QCOMPARE(b.wheelItems("pinned").size(),1);
+            QVERIFY(b.markWheel("category",project,"favorites",false));QVERIFY(b.wheelItems("favorites").isEmpty());
+            b.archive(project);QVERIFY(b.wheelItems("pinned").isEmpty());
+        }
+    }
+    void mouseWheelDirectionsSpreadsAndNotes() {
+        QTemporaryDir dir;Backend b(dir.path(),nullptr,false);Theme theme(dir.path());Translator translator(dir.filePath("language"),dir.path());
         QQmlApplicationEngine engine;QStringList warnings;
         connect(&engine,&QQmlEngine::warnings,this,[&](const QList<QQmlError>&errors){for(const auto&e:errors)warnings<<e.toString();});
         engine.rootContext()->setContextProperty("backend",&b);engine.rootContext()->setContextProperty("theme",&theme);engine.rootContext()->setContextProperty("translator",&translator);
         engine.load(QUrl("qrc:/Main.qml"));QVERIFY2(!engine.rootObjects().isEmpty(),qPrintable(warnings.join('\n')));
-        auto *win=qobject_cast<QQuickWindow*>(engine.rootObjects().first());auto *panel=win->findChild<QObject*>("keypadPanel");QVERIFY(panel);win->show();
-        b.setQuickIndex(0);QVERIFY(QMetaObject::invokeMethod(panel,"open"));QTRY_VERIFY(panel->property("opened").toBool());
-        QTest::keyClick(win,Qt::Key_4,Qt::KeypadModifier);QCOMPARE(b.quickIndex(),3);
-        QTest::keyClick(win,Qt::Key_5,Qt::KeypadModifier);QCOMPARE(b.quickIndex(),0);
-        QTest::keyClick(win,Qt::Key_4);QCOMPARE(b.quickIndex(),0);
-        QTest::keyClick(win,Qt::Key_Left,Qt::KeypadModifier);QCOMPARE(b.quickIndex(),3);
-        QTest::keyClick(win,Qt::Key_Clear,Qt::KeypadModifier);QCOMPARE(b.quickIndex(),0);
-        QTest::keyClick(win,Qt::Key_Enter);QTRY_VERIFY(!panel->property("visible").toBool());QVERIFY(b.currentId()>1);QCOMPARE(b.title(),QString("Research"));QVERIFY(!b.busy());
-        win->setProperty("page","tasks");auto *view=win->findChild<QObject*>("tasksView");QVERIFY(QMetaObject::invokeMethod(view,"newTask"));QTest::qWait(50);
-        auto *title=win->findChild<QObject*>("taskTitle");QVERIFY(title);title->setProperty("text",QString());
-        QTest::keyClick(win,Qt::Key_4,Qt::KeypadModifier);QCOMPARE(title->property("text").toString(),QString("4"));
+        auto *win=qobject_cast<QQuickWindow*>(engine.rootObjects().first());auto *wheel=win->findChild<QQuickWindow*>("hotboxOverlay");QVERIFY(wheel);
+        wheel->setProperty("anchorX",500);wheel->setProperty("anchorY",350);b.preview();QVERIFY(QMetaObject::invokeMethod(wheel,"resetMenu"));wheel->show();QTest::qWait(220);
+        QVERIFY(wheel->grabWindow().save("/tmp/hotbox-wheel-preview.png"));
+        QTest::keyClick(wheel,Qt::Key_6,Qt::KeypadModifier);QCOMPARE(wheel->property("groupIndex").toInt(),1);
+        QTest::keyClick(wheel,Qt::Key_4);QCOMPARE(wheel->property("groupIndex").toInt(),1);
+        QTest::keyClick(wheel,Qt::Key_Left,Qt::KeypadModifier);QCOMPARE(wheel->property("groupIndex").toInt(),0);
+        QTest::keyClick(wheel,Qt::Key_7,Qt::KeypadModifier);
+        QTest::keyClick(wheel,Qt::Key_Period,Qt::KeypadModifier);QVERIFY(!wheel->property("contextItem").toMap().isEmpty());
+        wheel->setProperty("contextItem",QVariantMap());QVERIFY(QMetaObject::invokeMethod(wheel,"resetMenu"));
+        QTest::keyClick(wheel,Qt::Key_7,Qt::KeypadModifier);QTest::keyClick(wheel,Qt::Key_0,Qt::KeypadModifier);
+        QCOMPARE(wheel->property("entryMode").toString(),QString("agent"));QCOMPARE(wheel->property("agentTarget").toMap()["action"].toString(),QString("task"));
+        QTest::keyClick(wheel,Qt::Key_Escape);QVERIFY(QMetaObject::invokeMethod(wheel,"resetMenu"));
+        // First press arms Tools (position 3); a repeated key event cannot open it.
+        QTest::keyClick(wheel,Qt::Key_3,Qt::KeypadModifier);QCOMPARE(wheel->property("selectedIndex").toInt(),3);QCOMPARE(wheel->property("currentParent").toInt(),0);
+        QKeyEvent repeat(QEvent::KeyPress,Qt::Key_3,Qt::KeypadModifier,"3",true);QCoreApplication::sendEvent(wheel,&repeat);QCOMPARE(wheel->property("currentParent").toInt(),0);
+        QTest::keyClick(wheel,Qt::Key_3,Qt::KeypadModifier);QCOMPARE(wheel->property("currentParent").toInt(),-1);
+        QTest::keyClick(wheel,Qt::Key_5,Qt::KeypadModifier);QTest::keyClick(wheel,Qt::Key_5,Qt::KeypadModifier);QCOMPARE(wheel->property("currentParent").toInt(),0);
+        QTest::keyClick(wheel,Qt::Key_Slash,Qt::KeypadModifier);QCOMPARE(b.recorder()->current()["state"].toString(),QString("recording"));
+        b.release();QVERIFY(b.expanded());
+        b.recorder()->action("folder","Open folder");
+        QTest::keyClick(wheel,Qt::Key_Plus,Qt::KeypadModifier);QCOMPARE(wheel->property("entryMode").toString(),QString("note"));
+        auto *note=wheel->findChild<QObject*>("wheelNote");QVERIFY(note);note->setProperty("text",QString("Use this folder"));QTest::keyClick(wheel,Qt::Key_Enter);
+        QCOMPARE(wheel->property("entryMode").toString(),QString());QCOMPARE(b.recorder()->current()["count"].toInt(),2);
+        b.recorder()->togglePause();QVERIFY(!b.recorder()->addNote("Excluded while paused"));
+        b.recorder()->action("browser","Excluded while paused");QCOMPARE(b.recorder()->current()["count"].toInt(),2);
+        QTest::keyClick(wheel,Qt::Key_Enter);QCOMPARE(b.recorder()->current()["state"].toString(),QString("stopped"));QCOMPARE(wheel->property("entryMode").toString(),QString("deck"));
+        QVERIFY(QDir(b.deck()["path"].toString()).removeRecursively());
+        wheel->setProperty("entryMode",QString());QVERIFY(QMetaObject::invokeMethod(wheel,"resetMenu"));
+        QTest::keyClick(wheel,Qt::Key_Enter);QCOMPARE(wheel->property("entryMode").toString(),QString("prompt"));
+        note->setProperty("text",QString("Make a small sample"));QTest::keyClick(wheel,Qt::Key_Enter);QCOMPARE(wheel->property("entryMode").toString(),QString("deck"));
+        QVERIFY(QDir(b.deck()["path"].toString()).removeRecursively());b.closeMenu();QVERIFY(!b.expanded());
         QVERIFY2(warnings.isEmpty(),qPrintable(warnings.join('\n')));
     }
     void qmlLoadsAndCenterOpensMaster() {

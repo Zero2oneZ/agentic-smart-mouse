@@ -18,6 +18,7 @@ class TaskService : public QObject {
     ~TaskService() override;
     QVariantList jobs() const { return m_jobs; }
     QVariantMap selected() const { return m_selected; }
+    QString helperPath() const { return m_helper; }
     bool available() const { return !m_helper.isEmpty(); }
     bool busy() const { return m_process.state() != QProcess::NotRunning; }
     QString problem() const { return m_problem; }
