@@ -215,3 +215,13 @@ Extend the existing agent-builder milestones with:
 Documentation/template changes only in this increment. No prompt is installed in
 live chats and no current Hotbox command is rerouted until these adapters and tests
 are implemented.
+
+
+## Orchestration loop planner
+
+The [loop-planner plan](ORCHESTRATION_LOOP_PLANNER.md) and proposed
+[system prompt](../templates/prompts/orchestration-loop-planner-v1.md) define initial
+graph planning, event-driven reassessment, ready-work dispatch proposals, bounded
+replanning, waiting, escalation and evidence-based completion. The model planner is
+separate from the deterministic controller/scheduler, worker and verifier. Its
+actual plan revisions and outcomes stay private; only reusable definitions are global.

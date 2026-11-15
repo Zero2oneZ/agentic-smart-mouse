@@ -288,3 +288,14 @@ Placement/role/fit never grants authority. Global reusable definitions remain se
 from personal environment requests, generations, task outcomes, memory, RAG and logs.
 These are planning documents and an unconnected prompt template, not live swarm or
 ranking functionality.
+
+
+### Planned orchestration loop planner
+
+The [loop-planner plan](core/docs/ORCHESTRATION_LOOP_PLANNER.md) adds a proposed
+[system prompt](core/templates/prompts/orchestration-loop-planner-v1.md) for turning
+objectives into bounded specialist graphs and proposing dispatch, wait, replan,
+escalate, finish or stop decisions. A deterministic controller owns authority,
+state and budgets; independent checks own acceptance. Plans and task outcomes stay
+in personal environments, while reusable prompts/recipes remain in the global
+catalog. This is a specification/template increment, not an activated planner.

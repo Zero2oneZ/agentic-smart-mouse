@@ -430,3 +430,13 @@ RAG, logs and checkpoints stay in the selected personal/project environment.
 Placement and task-specific coordination roles are model proposals validated by the
 core; they never confer permissions. See [Swarm catalog plan](SWARM_CATALOG_PLAN.md)
 for the system prompt contract, specialist composition and revised acceptance tests.
+
+
+## Loop-planner dependency
+
+Every process recipe declares a [loop-planner contract](ORCHESTRATION_LOOP_PLANNER.md),
+which may be deterministic for a simple task or model-assisted for a larger swarm.
+Builder requirements include pinned planner/harness versions, acceptance criteria,
+aggregate planning/worker/verifier budgets, retry/replan bounds, wait/wake conditions
+and stop rules. The controller validates proposals; the planner cannot execute,
+authorize itself or declare verified completion by narrative.

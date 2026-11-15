@@ -190,3 +190,13 @@ Reusable definitions are globally discoverable only under catalog policy; person
 requests, generations, task outcomes, memory/RAG and logs remain in the runtime
 owner's environment. Implement typed proposal validation and the data partition
 before routing actions to swarms. The prompt template is not wired into live chats.
+
+
+## Orchestration loop planner — planned
+
+The [loop-planner specification](ORCHESTRATION_LOOP_PLANNER.md) defines a separate
+planning specialist, deterministic controller, scheduler, workers and verifiers.
+Start with typed plan/decision records, scoped SQL checkpoint/revision checks and a
+deterministic private-output fixture. Add model assistance and UI inspection only
+after proposal validation, bounded replanning, wait/stop behavior and acceptance
+checks exist. The proposed prompt and JSON example are not installed runtime code.
