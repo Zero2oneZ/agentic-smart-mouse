@@ -168,3 +168,14 @@ adding real sandbox/network workers. A cloud backend must attest required contro
 and refuse unsupported features rather than silently weakening isolation. Retain
 the same operation protocol with destination-local secrets and bindings. No shared
 multi-host SQLite file or implicit export of user belongings is part of this plan.
+
+
+## Product integration: Agents category and builder — planned
+
+The [agent-builder plan](AGENT_BUILDER_PLAN.md) defines the next UI/product increment:
+Hotbox Agents navigation, contextual + creation, saved drafts, mandatory requirement
+hooks and pinned skill/task/harness/environment references. It includes compute
+ownership, prompt persistence, scoped memory/RAG/logs, scheduling, reporting and the
+bounded orchestrator loop. No Agents menu or runtime service is implemented by the
+planning document. Start with the scoped authoring registry/validators, then the Qt
+builder, and a deterministic local-report fixture before enabling real runners.

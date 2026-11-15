@@ -259,3 +259,19 @@ The CLI also has a [container build recipe](core/Containerfile) and a helper tha
 requires reviewed digest-pinned base images. Packaging never pushes or launches an
 image. Image building is unverified here because Docker daemon access is denied;
 local Rust tests and CLI planning work independently.
+
+
+## Planned Agents category and builder
+
+The [agent-builder plan](core/docs/AGENT_BUILDER_PLAN.md) specifies **Hotbox → Agents
+→ + → Agent Builder**, with resumable drafts and mandatory requirements for scope,
+permissions, tasks, versioned prompts/skills, harnesses, compute, persistence,
+RAG/memory, schedules, reporting and verification. Agents and reusable skills/tasks
+have stable identities and categorized source trees; private state stays outside Git.
+
+Default placement is a private per-instance workspace on a scoped worker pool,
+with dedicated environments/VMs as explicit later options. New drafts are disabled,
+manual-only, with no RAG, network or external delivery by default. The planned
+orchestrator admits only verified releases under current grants and backend controls.
+This is a design/implementation plan; no live Agents menu, agent service, VM,
+schedule or RAG integration is enabled by this documentation change.

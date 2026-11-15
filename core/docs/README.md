@@ -17,6 +17,7 @@ the Rust kernel remain separate programs and use separate databases.
 | [Operations](OPERATIONS.md) | Local setup, database handling, backup, recovery and troubleshooting |
 | [Development and tests](DEVELOPMENT.md) | Source map, verification commands, coverage and extension requirements |
 | [Decision record](DECISIONS.md) | Settled design choices, deferred choices and questions still requiring a decision |
+| [Agents category and builder plan](AGENT_BUILDER_PLAN.md) | Contextual + flow, mandatory requirements, skills/tasks, compute, RAG, schedules and reports |
 | [Implementation plan](PLAN.md) | Ordered increments and acceptance criteria for the remaining work |
 
 For the running desktop app, see the [project README](../../README.md). For code

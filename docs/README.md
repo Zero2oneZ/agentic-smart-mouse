@@ -8,6 +8,7 @@ orchestration foundation. They have different runtime responsibilities and datab
 | [Project README](../README.md) | Desktop installation, activation gesture, chats, model setup, Git, session segments and shared storage |
 | [Rust core README](../core/README.md) | Standalone deterministic kernel scope and quick start |
 | [Rust documentation index](../core/docs/README.md) | Architecture, contracts, all CLI commands, governance, operations and developer references |
+| [Agents builder plan](../core/docs/AGENT_BUILDER_PLAN.md) | Planned Hotbox Agents category, mandatory authoring flow and runtime requirements |
 | [Implementation plan](../core/docs/PLAN.md) | Delivery sequence for tool lineage, authentication, isolated execution, PTC and adapters |
 | [Design decisions](../core/docs/DECISIONS.md) | Settled requirements and production choices still open |
 | [Repository contributor instructions](../AGENTS.md) | Local build/testing and preservation rules |
