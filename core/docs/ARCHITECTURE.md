@@ -101,7 +101,9 @@ Each development context should carry the request, pinned version and architectu
 selected skills, concise decisions and evidence references. Retrieve deeper history
 only when needed. Forks retain provenance without copying every conversation into
 each request. Neither navigation nor a fork automatically grants access to data.
-These specific tool-lineage interactions are requirements, not implemented Rust APIs.
+The Rust registry now resolves selected development contexts and records fork identities
+and originating-chat references. Creating/opening chats, Git copying and these desktop
+interactions remain adapter requirements. References are metadata, not verified Git objects.
 
 ## Target service composition
 

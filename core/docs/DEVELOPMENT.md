@@ -6,6 +6,7 @@
 | --- | --- |
 | [Cargo.toml](../Cargo.toml) and [Cargo.lock](../Cargo.lock) | Package, dependency and compiler requirements |
 | [lib.rs](../src/lib.rs) | Public exports and typed errors |
+| [lineage.rs](../src/lineage.rs) | Immutable tool versions, selected development contexts and fork metadata |
 | [model.rs](../src/model.rs) | Templates, graph validation, input/output types and fixture evidence |
 | [permissions.rs](../src/permissions.rs) | Resources, grant lineage and revocation |
 | [engine.rs](../src/engine.rs) | Database format and transactional workflow operations |
@@ -42,7 +43,7 @@ replay, deadline and fixture boundaries.
 
 ## Current test coverage
 
-The existing suite has 20 library integration tests. This table names the tests so
+The existing suite has 24 library integration tests. This table names the tests so
 behavior can be traced directly to executable checks.
 
 | Test | Behavior covered |
@@ -104,7 +105,7 @@ update, not a magic string in a stored template.
 
 ## Schema and policy changes
 
-There is one kernel database schema version and no general migration framework.
+Kernel schema 2 includes a transactional additive migration from schema 1; there is no general migration framework.
 Do not change stored run/grant JSON compatibility while silently keeping the same
 schema identifier. Define migration direction, backup requirements and failure
 behavior; test both an empty installation and existing accepted checkpoints.
@@ -126,3 +127,8 @@ wildcard authority merely to avoid enumerating domain permissions.
 
 The next work should follow [PLAN.md](PLAN.md), with the acceptance criteria made
 executable before enabling agent-driven orchestration.
+
+Tool registry tests additionally cover immutable versions and reopened contexts,
+independent fork identity and grants, revoked source access, ownership and metadata
+validation, and preservation of an in-flight workflow through schema-1 migration.
+The CLI fixture exercises all four registry commands across fresh processes.

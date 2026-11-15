@@ -85,7 +85,9 @@ A confirmed branch/share agreement should record:
 The original sharer's right to receive technology changes is distinct from rights
 to local files or governance. A middle party may govern its local group only within
 delegated authority. Confirmation must not transfer their private keys to the mother
-repository owner. These agreements, group roles and tool lineage are not implemented.
+repository owner. These agreements and group roles are not implemented. Tool lineage metadata is
+implemented, with live source-read checks and owner-only mutations; it does not
+assert licensing or contribution eligibility.
 
 ## Credentials and execution — target
 

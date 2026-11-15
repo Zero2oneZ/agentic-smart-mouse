@@ -72,4 +72,19 @@ with tempfile.TemporaryDirectory(prefix="hotbox-core-cli-") as temporary:
     assert call("status", actor="carol", run_id="independent")["status"] == "running"
     call("status", succeeds=False, actor="bob", run_id="independent")
 
-print("CLI fixture passed: segmented build, restart/resume, immutable template, audit events, delegated revocation, independent access.")
+    version = {"version": "1.0.0", "source_commit": "a" * 40,
+               "architecture_version": "architecture-v1", "originating_chat": "chat-original"}
+    call("register_tool", request={"actor": "alice", "tool_id": "player", "resource": "project", "initial": version})
+    context = call("tool_context", actor="alice", grant_id="alice-root", tool_id="player", version="1.0.0")
+    assert context["selected"] == version and context["forked_from"] is None
+    call("tool_version", actor="alice", tool_id="player", version={**version, "source_commit": "b" * 40}, succeeds=False)
+    call("tool_version", actor="alice", tool_id="player", version={**version, "version": "2.0.0"})
+    call("resource", actor="alice", resource="fork-project")
+    fork = call("fork_tool", request={"actor": "alice", "grant_id": "alice-root",
+        "source": {"tool_id": "player", "version": "1.0.0"}, "tool_id": "player-fork",
+        "resource": "fork-project", "originating_chat": "chat-fork"})
+    assert fork["selected"]["originating_chat"] == "chat-fork"
+    assert fork["forked_from"] == {"tool_id": "player", "version": "1.0.0"}
+    call("tool_context", actor="alice", grant_id="alice-root", tool_id="player-fork", version="1.0.0", succeeds=False)
+
+print("CLI fixture passed: segmented build, restart/resume, immutable template, audit events, delegated revocation, independent access, immutable tool versions and fork lineage.")

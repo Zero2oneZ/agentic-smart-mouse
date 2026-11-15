@@ -1,10 +1,12 @@
 //! Local, deterministic orchestration kernel. No network, shell execution or model calls.
 //! Caller identities must come from a trusted host; this crate is not an authentication service.
 mod engine;
+mod lineage;
 mod model;
 mod permissions;
 
 pub use engine::{Clock, Engine, SystemClock};
+pub use lineage::*;
 pub use model::*;
 pub use permissions::{Grant, GrantRequest};
 

@@ -1,7 +1,7 @@
 # Deterministic Rust core
 
-This standalone crate is the first implementation increment of the orchestration
-plan in [docs/PLAN.md](docs/PLAN.md). It can be copied out of this repository and
+This standalone crate contains the first implementation increment and the
+tool-lineage slice of the orchestration plan in [docs/PLAN.md](docs/PLAN.md). It can be copied out of this repository and
 built without Qt, Omarchy, Hyprland, a model, or a running service.
 
 Use the [documentation index](docs/README.md) for the complete architecture,
@@ -10,7 +10,7 @@ contract, CLI, security, operations, testing and decision references. The
 temporary database; the [implementation plan](docs/PLAN.md) separates the next
 increments from current fixture functionality.
 
-It implements versioned segment contracts, mandatory stage barriers, a validated
+It implements immutable tool versions and fork provenance alongside versioned segment contracts, mandatory stage barriers, a validated
 DAG, private SQLite checkpoints, transactional worker leases, bounded retries,
 operation and abstract cost budgets, cancellation, and a local delegation policy
 engine. The fixtures exercise the whole protocol without executing commands.
@@ -112,3 +112,11 @@ Its execution environment does not itself provide isolation for local builds.
 PTC is not connected in this increment. No model credentials or network calls are
 used by the core. Real executors need explicit adapters and independent verification
 before their contracts can replace the fixture executors.
+
+## Tool lineage
+
+See the [tool registry CLI](docs/CLI.md#tool-lineage-registry). Tool and source
+identities are separate from permission grants and runtime storage. Forking records
+provenance and a new development-chat reference; it neither reads a Git repository
+nor copies data or credentials. Version references cannot be rewritten. These are
+trusted-host APIs, not authenticated endpoints or a connected desktop menu.

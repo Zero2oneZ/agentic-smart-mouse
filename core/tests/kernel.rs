@@ -588,3 +588,191 @@ fn symlinked_database_locations_are_rejected() {
     assert!(Engine::open(root.0.join("link/kernel.sqlite3")).is_err());
     assert!(!target.join("kernel.sqlite3").exists());
 }
+
+fn tool_version() -> ToolVersion {
+    ToolVersion {
+        version: "1.0.0".into(),
+        source_commit: "a".repeat(40),
+        architecture_version: "architecture-v1".into(),
+        originating_chat: "chat-original".into(),
+    }
+}
+fn register(f: &mut Fixture) {
+    f.engine
+        .register_tool(RegisterTool {
+            actor: "alice".into(),
+            tool_id: "player".into(),
+            resource: "project".into(),
+            initial: tool_version(),
+        })
+        .unwrap();
+}
+#[test]
+fn tool_versions_are_immutable_and_context_survives_restart() {
+    let mut f = Fixture::new();
+    register(&mut f);
+    f.engine
+        .add_tool_version("alice", "player", tool_version())
+        .unwrap();
+    let mut changed = tool_version();
+    changed.source_commit = "b".repeat(40);
+    assert!(matches!(
+        f.engine
+            .add_tool_version("alice", "player", changed.clone()),
+        Err(Error::Conflict(_))
+    ));
+    changed.version = "2.0.0".into();
+    f.engine
+        .add_tool_version("alice", "player", changed.clone())
+        .unwrap();
+    let reopened =
+        Engine::open_with_clock(f.root.0.join("kernel.sqlite3"), f.clock.clone()).unwrap();
+    assert_eq!(
+        reopened
+            .tool_context("alice", "root", "player", "1.0.0")
+            .unwrap()
+            .selected,
+        tool_version()
+    );
+    assert_eq!(
+        reopened
+            .tool_context("alice", "root", "player", "2.0.0")
+            .unwrap()
+            .selected,
+        changed
+    );
+}
+#[test]
+fn forks_have_independent_identity_versions_and_access() {
+    let mut f = Fixture::new();
+    register(&mut f);
+    f.engine.create_resource("bob", "fork-project").unwrap();
+    f.engine
+        .grant(grant(
+            "read",
+            "alice",
+            "bob",
+            Some("root"),
+            ["source.read".into()].into(),
+        ))
+        .unwrap();
+    let request = ForkTool {
+        actor: "bob".into(),
+        grant_id: "read".into(),
+        source: ToolOrigin {
+            tool_id: "player".into(),
+            version: "1.0.0".into(),
+        },
+        tool_id: "fork".into(),
+        resource: "fork-project".into(),
+        originating_chat: "chat-fork".into(),
+    };
+    let mut same_chat = request.clone();
+    same_chat.originating_chat = "chat-original".into();
+    assert!(matches!(
+        f.engine.fork_tool(same_chat),
+        Err(Error::Invalid(_))
+    ));
+    let context = f.engine.fork_tool(request.clone()).unwrap();
+    assert_eq!(context.forked_from, Some(request.source.clone()));
+    assert_eq!(context.selected.originating_chat, "chat-fork");
+    assert_eq!(context.selected.source_commit, tool_version().source_commit);
+    // Original grants cannot read the fork; the fork owner needs an independent grant.
+    assert!(
+        f.engine
+            .tool_context("bob", "read", "fork", "1.0.0")
+            .is_err()
+    );
+    let mut fork_grant = grant("fork-root", "bob", "bob", None, actions());
+    fork_grant.resource = "fork-project".into();
+    f.engine.grant(fork_grant).unwrap();
+    let mut changed = context.selected.clone();
+    changed.version = "2.0.0".into();
+    changed.source_commit = "b".repeat(40);
+    f.engine.add_tool_version("bob", "fork", changed).unwrap();
+    assert!(
+        f.engine
+            .add_tool_version("bob", "player", tool_version())
+            .is_err()
+    );
+    f.engine.revoke("alice", "read").unwrap();
+    let mut denied = request.clone();
+    denied.tool_id = "denied".into();
+    assert!(f.engine.fork_tool(denied.clone()).is_err());
+    assert!(
+        f.engine
+            .tool_context("bob", "read", "player", "1.0.0")
+            .is_err()
+    );
+    assert!(
+        f.engine
+            .tool_context("bob", "fork-root", "fork", "2.0.0")
+            .is_ok()
+    );
+    assert_eq!(
+        f.engine
+            .tool_context("alice", "root", "player", "1.0.0")
+            .unwrap()
+            .selected,
+        tool_version()
+    );
+    // A denied fork must leave no new tool record.
+    let db = rusqlite::Connection::open(f.root.0.join("kernel.sqlite3")).unwrap();
+    let count: i64 = db
+        .query_row("SELECT count(*) FROM tools WHERE id='denied'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(count, 0);
+}
+#[test]
+fn invalid_tool_metadata_and_unowned_resources_are_rejected() {
+    let mut f = Fixture::new();
+    let mut request = RegisterTool {
+        actor: "bob".into(),
+        tool_id: "player".into(),
+        resource: "project".into(),
+        initial: tool_version(),
+    };
+    assert!(matches!(
+        f.engine.register_tool(request.clone()),
+        Err(Error::Denied(_))
+    ));
+    request.actor = "alice".into();
+    request.initial.source_commit = "main".into();
+    assert!(matches!(
+        f.engine.register_tool(request.clone()),
+        Err(Error::Invalid(_))
+    ));
+    request.initial = tool_version();
+    f.engine.register_tool(request.clone()).unwrap();
+    assert!(matches!(
+        f.engine.register_tool(request),
+        Err(Error::Conflict(_))
+    ));
+}
+#[test]
+fn schema_one_migration_preserves_inflight_work_and_grants() {
+    let mut f = Fixture::new();
+    f.start(template());
+    let claim = f.claim();
+    // Reconstruct the v1 schema while retaining a real checkpoint and permission tree.
+    let db = rusqlite::Connection::open(f.root.0.join("kernel.sqlite3")).unwrap();
+    db.execute_batch("DROP TABLE tool_versions; DROP TABLE tools; PRAGMA user_version=1;")
+        .unwrap();
+    drop(db);
+    drop(f.engine);
+    f.engine = Engine::open_with_clock(f.root.0.join("kernel.sqlite3"), f.clock.clone()).unwrap();
+    f.finish(&claim);
+    register(&mut f);
+    assert!(
+        f.engine
+            .tool_context("alice", "root", "player", "1.0.0")
+            .is_ok()
+    );
+    let db = rusqlite::Connection::open(f.root.0.join("kernel.sqlite3")).unwrap();
+    let version: i64 = db
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 2);
+}

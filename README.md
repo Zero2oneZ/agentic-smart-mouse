@@ -189,3 +189,20 @@ hotbox architecture ensure --category PROJECT_ID --capabilities music,album-cove
 ```
 
 `init` accepts `--tool-root` and `--runtime-root` for separate absolute locations outside existing Git repositories. Roots must initially be empty; symlinks, overlapping roots and roots containing the private database are rejected. Roots cannot be changed after initialization through this API. Paths from templates are validated before use. A local lock serializes registry mutations. On an I/O failure, already created directories remain in place; provisioning can be retried after the underlying problem is resolved. Hotbox never deletes directories to roll back an error.
+
+
+## Standalone tool lineage registry
+
+The separate Rust core now records immutable tool identities and versions, full Git
+commit references, architecture versions, originating chat references and fork
+ancestry. `tool_context` resolves a selected version under a live `source.read`
+grant. Forks require a distinct destination resource owned by the caller and a new
+chat reference; they copy version metadata only, leaving grants, credentials,
+runtime bindings and the original tool unchanged. This is a local registry, not a
+Git copy operation or a connected Edit/Fork UI. Reviewed plans and contribution
+agreements remain future work. See [core CLI](core/docs/CLI.md#tool-lineage-registry).
+
+The core check suite covers 24 integration tests plus the multi-process CLI fixture.
+It runs independently of the installed Qt application. Kernel schema 1 upgrades
+transactionally to schema 2; back up the separate kernel database before opening it
+with this version. The Qt chat database is never migrated by the core.

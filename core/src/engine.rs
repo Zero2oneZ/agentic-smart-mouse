@@ -148,7 +148,7 @@ impl Engine {
         let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
         if (app_id != 0 && app_id != APPLICATION_ID)
             || (app_id == 0 && (tables != 0 || version != 0))
-            || (app_id == APPLICATION_ID && version != 1)
+            || (app_id == APPLICATION_ID && !(1..=2).contains(&version))
         {
             return Err(Error::Invalid(
                 "database belongs to another application or unsupported schema".into(),
@@ -170,7 +170,10 @@ impl Engine {
             CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY,run_id TEXT,actor TEXT NOT NULL,kind TEXT NOT NULL,
                 detail TEXT NOT NULL CHECK(json_valid(detail)),created_at INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS events_run ON events(run_id,id);
-            PRAGMA application_id=1212307523; PRAGMA user_version=1;")?;
+            CREATE TABLE IF NOT EXISTS tools(id TEXT PRIMARY KEY,resource TEXT NOT NULL REFERENCES resources(id),origin TEXT CHECK(origin IS NULL OR json_valid(origin)));
+            CREATE TABLE IF NOT EXISTS tool_versions(tool_id TEXT NOT NULL REFERENCES tools(id),version TEXT NOT NULL,
+                document TEXT NOT NULL CHECK(json_valid(document)),PRIMARY KEY(tool_id,version));
+            PRAGMA application_id=1212307523; PRAGMA user_version=2;")?;
         tx.commit()?;
         Ok(Self { db, clock })
     }

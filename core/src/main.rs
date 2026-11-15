@@ -11,6 +11,23 @@ use std::{
 #[derive(Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case", deny_unknown_fields)]
 enum Command {
+    RegisterTool {
+        request: hotbox_core::RegisterTool,
+    },
+    ToolVersion {
+        actor: String,
+        tool_id: String,
+        version: hotbox_core::ToolVersion,
+    },
+    ToolContext {
+        actor: String,
+        grant_id: String,
+        tool_id: String,
+        version: String,
+    },
+    ForkTool {
+        request: hotbox_core::ForkTool,
+    },
     Resource {
         actor: String,
         resource: String,
@@ -87,6 +104,22 @@ fn execute() -> Result<Value> {
     let command: Command = serde_json::from_slice(&bounded_read(io::stdin().lock())?)?;
     let mut engine = Engine::open(&args[0])?;
     Ok(match command {
+        Command::RegisterTool { request } => serde_json::to_value(engine.register_tool(request)?)?,
+        Command::ToolVersion {
+            actor,
+            tool_id,
+            version,
+        } => {
+            engine.add_tool_version(&actor, &tool_id, version)?;
+            json!({})
+        }
+        Command::ToolContext {
+            actor,
+            grant_id,
+            tool_id,
+            version,
+        } => serde_json::to_value(engine.tool_context(&actor, &grant_id, &tool_id, &version)?)?,
+        Command::ForkTool { request } => serde_json::to_value(engine.fork_tool(request)?)?,
         Command::Resource { actor, resource } => {
             engine.create_resource(&actor, &resource)?;
             json!({})

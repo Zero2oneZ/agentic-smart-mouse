@@ -296,3 +296,51 @@ for a grant; it has no CLI equivalent. `fixture_loop` is CLI composition, not an
 `Engine` method. `Template::validate`, `Template::hash` and `fixture_report` can run
 without a database. Use `cargo doc --locked --offline --no-deps` for generated API
 navigation; this reference supplies the behavioral contract.
+
+
+## Tool lineage registry
+
+These commands use the same trusted-host actor model as the workflow API. They
+store metadata only; they do not run Git, verify commit existence, open chats,
+copy source files, provision data, or grant permissions. Chat and architecture
+references are bounded identifiers. Source commits must be full lowercase 40- or
+64-character hexadecimal Git object IDs. Version labels are immutable bounded
+identifiers; they are not interpreted as ordered semantic versions.
+
+Register on an existing resource owned by the actor:
+
+```json
+{"command":"register_tool","request":{"actor":"alice","tool_id":"player","resource":"project","initial":{"version":"1.0.0","source_commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","architecture_version":"architecture-v1","originating_chat":"chat-original"}}}
+```
+
+Add a version with `{"command":"tool_version","actor":"alice","tool_id":"player","version":{...}}`,
+where `version` has the same four fields as `initial`. The owner may replay identical
+version metadata, but cannot change an existing version; choose a new label instead.
+Registering or forking with an existing tool ID returns a conflict.
+
+Resolve the originating context for a selected version:
+
+```json
+{"command":"tool_context","actor":"alice","grant_id":"alice-root","tool_id":"player","version":"1.0.0"}
+```
+
+The result contains `tool_id`, `resource`, `selected` version metadata and nullable
+`forked_from` ancestry. Reads require a current `source.read` grant for that resource,
+including for the owner. Mutations require ownership and do not use delegated
+`source.write` authority. No wildcard or new permission action is introduced.
+
+Fork into a distinct existing caller-owned resource:
+
+```json
+{"command":"fork_tool","request":{"actor":"alice","grant_id":"alice-root","source":{"tool_id":"player","version":"1.0.0"},"tool_id":"player-fork","resource":"fork-project","originating_chat":"chat-fork"}}
+```
+
+The initial fork version retains the selected version label, source commit and
+architecture reference, while using the supplied fork chat reference. Its ancestry
+retains the original tool and version. Permissions and runtime bindings are never
+copied. The destination needs its own grant for protected reads. Revocation prevents
+later reads/forks from the source; it does not erase an already created independent
+fork. Reviewed plans and licensing eligibility are not implemented in this slice.
+
+Registry mutations emit accepted-operation events with no `run_id`; current event
+pagination is run-scoped, so registry events do not yet have a public query command.

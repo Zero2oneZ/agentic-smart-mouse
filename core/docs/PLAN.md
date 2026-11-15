@@ -42,9 +42,19 @@ The fixture stages represent protocol transitions only. They do not perform the
 real actions in the evidence table. Cost units are abstract reservations, not token
 or money accounting. Caller identity is a trusted library argument, not authentication.
 
-## Increment 2: tool lineage and reviewed plans
+## Increment 2: tool lineage and reviewed plans — registry slice implemented
 
-Add immutable tool IDs, source-version references, originating chats, architecture
+Implemented: the local registry and CLI persist immutable tool IDs, versions,
+source commits, originating-chat references, architecture versions and fork ancestry.
+A live source-read grant is checked before reading or forking; the destination must
+be a distinct caller-owned resource. Forks copy metadata only. Tests cover independent
+edits/access, denied forks, immutable history, restart and schema-1 migration.
+
+Remaining in this increment: reviewed plan revisions, contribution agreements,
+actual Git fork/copy operations, and creating/opening focused chats in the UI.
+Chat IDs and commit hashes are validated references, not verified external objects.
+
+The complete increment must add immutable tool IDs, source-version references, originating chats, architecture
 versions, plan approval records and fork ancestry. Edit opens the originating tool's
 focused development context. Fork creates a new identity and focused chat from a
 selected version. Git refs, runtime instances, user libraries and grants remain
