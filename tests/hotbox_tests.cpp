@@ -24,6 +24,17 @@
 class HotboxTests : public QObject {
     Q_OBJECT
   private slots:
+    void masterLoopTracksReportedUsageAndParentBudgets() {
+        QTemporaryDir dir;QDir().mkpath(dir.filePath("bin"));QFile fake(dir.filePath("bin/codex"));
+        auto write=[&](int input){if(!fake.open(QIODevice::WriteOnly|QIODevice::Truncate))return false;fake.write(("#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":"+QString::number(input)+",\"output_tokens\":3}}'\n").toUtf8());fake.close();return fake.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner);};QVERIFY(write(12));
+        const auto old=qgetenv("PATH");auto restore=qScopeGuard([&]{qputenv("PATH",old);});qputenv("PATH",(dir.filePath("bin")+":/usr/bin").toUtf8());
+        Backend b(dir.filePath("data"),nullptr,false);auto *agents=b.agents();auto run=agents->start("Review a loop",{{"name","Master loop"},{"id",1}},"codex");QVERIFY(!run.isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(agents->selected()["state"].toString(),QString("finished"),5000);
+        auto report=b.optimizerReport();QCOMPARE(report["reportedInputTokens"].toLongLong(),12LL);QCOMPARE(report["reportedOutputTokens"].toLongLong(),3LL);QCOMPARE(report["usageUnknown"].toInt(),0);
+        auto next=agents->start("Check again",{},"codex",run);QVERIFY(!next.isEmpty());QTRY_COMPARE(agents->selected()["state"].toString(),QString("finished"));QCOMPARE(b.optimizerReport()["parentRuns"].toInt(),1);QCOMPARE(agents->selected()["loop"].toMap()["root"].toString(),run);QCOMPARE(agents->selected()["loop"].toMap()["depth"].toInt(),1);QVERIFY(agents->selected()["loop"].toMap()["policyRevision"].toString().size()==64);
+        QVERIFY(write(128000));auto large=agents->start("Budget example",{{"name","Example"},{"id",1}},"codex");QVERIFY(!large.isEmpty());QTRY_COMPARE(agents->selected()["state"].toString(),QString("finished"));QVERIFY(agents->start("Again",{},"codex",large).isEmpty());
+        auto child=b.addCategory("Scoped","","",0);b.select(child);QVERIFY(b.contextTool("inspect_master_loop",{}).contains("error"));b.select(1);QVERIFY(!b.contextTool("inspect_master_loop",{}).contains("error"));
+    }
     void runtimeReportSeparatesPrivateStateAndOutputs() {
         QTemporaryDir dir;Backend b(dir.filePath("data"),nullptr,false);auto report=b.runtimeReport();
         QVERIFY(report["databaseOk"].toBool());QVERIFY(!report["runtimeInsideGit"].toBool());

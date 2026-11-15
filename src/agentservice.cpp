@@ -1,6 +1,7 @@
 #include "agentservice.h"
 #include "sessionledger.h"
 #include <QDateTime>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QRegularExpression>
 #include <QFile>
@@ -41,6 +42,8 @@ AgentService::AgentService(const QSqlDatabase &db, const QString &directory, boo
            "target TEXT NOT NULL,prompt TEXT NOT NULL,path TEXT NOT NULL,state TEXT NOT NULL,detail TEXT NOT "
            "NULL,"
            "created TEXT NOT NULL,ack INTEGER NOT NULL DEFAULT 0)");
+    q.exec("CREATE TABLE IF NOT EXISTS loop_metrics(run TEXT PRIMARY KEY REFERENCES agent_runs(id),root_run TEXT NOT NULL,parent_run TEXT NOT NULL,depth INTEGER NOT NULL,policy_revision TEXT NOT NULL,policy TEXT NOT NULL,usage_known INTEGER NOT NULL DEFAULT 0,input_tokens INTEGER,output_tokens INTEGER)");
+    q.exec("CREATE INDEX IF NOT EXISTS loop_metrics_root ON loop_metrics(root_run)");
     if (recover) {
         q.exec("UPDATE agent_runs SET state='attention',detail='Hotbox restarted; run was interrupted.' "
                "WHERE state='running'");
@@ -84,6 +87,8 @@ QVariantMap AgentService::read(const QString &id) const {
                     {"state", q.value(5)},
                     {"detail", q.value(6)},
                     {"created", q.value(7)}};
+    QSqlQuery metrics(m_db);metrics.prepare("SELECT root_run,parent_run,depth,policy_revision,usage_known,input_tokens,output_tokens FROM loop_metrics WHERE run=?");metrics.addBindValue(id);
+    if(metrics.exec()&&metrics.next())out["loop"]=QVariantMap{{"root",metrics.value(0)},{"parent",metrics.value(1)},{"depth",metrics.value(2)},{"policyRevision",metrics.value(3)},{"usageKnown",metrics.value(4).toBool()},{"inputTokens",metrics.value(5)},{"outputTokens",metrics.value(6)}};
     QFile log(out["path"].toString() + "/run.log");
     if (log.open(QIODevice::ReadOnly)) {
         if (log.size() > 64000)
@@ -138,8 +143,13 @@ QString AgentService::start(const QString &prompt, const QVariantMap &target, co
         return fail(tr("Write a prompt up to 4,000 characters."));
     if (!QStringList{"codex", "claude"}.contains(provider))
         return fail(tr("Choose Codex or Claude."));
-    if (m_processes.size() >= 3)
-        return fail(tr("Three agents are already running. Stop one or wait."));
+    QFile policyFile(":/master-loop-policy.json");
+    if(!policyFile.open(QIODevice::ReadOnly))return fail(tr("Master-loop policy is unavailable."));
+    QByteArray policyBytes=policyFile.readAll();
+    auto policy=QJsonDocument::fromJson(policyBytes).object();
+    if(policy["schema_version"].toInt()!=1)return fail(tr("Unsupported master-loop policy."));
+    if (m_processes.size() >= policy["max_parallel_runs"].toInt())
+        return fail(tr("The master loop parallel limit is reached. Stop a run or wait."));
     auto executable = QStandardPaths::findExecutable(provider);
     if (executable.isEmpty())
         return fail(tr("%1 is not installed or is not on Hotbox's PATH.").arg(provider));
@@ -159,7 +169,17 @@ QString AgentService::start(const QString &prompt, const QVariantMap &target, co
         safeTarget = source["target"].toMap();
         prior = source["output"].toString().right(16000);
     }
+    int depth=0;QString rootRun;
+    if(!previous.isEmpty()){
+        QSqlQuery lineage(m_db);lineage.prepare("SELECT root_run,depth,policy FROM loop_metrics WHERE run=?");lineage.addBindValue(previous);
+        if(lineage.exec()&&lineage.next()){rootRun=lineage.value(0).toString();depth=lineage.value(1).toInt()+1;policyBytes=lineage.value(2).toByteArray();policy=QJsonDocument::fromJson(policyBytes).object();}else{rootRun=previous;depth=1;}
+        if(depth>policy["max_followup_depth"].toInt())return fail(tr("This run family reached its follow-up limit. Review its plan before starting new work."));
+        QSqlQuery usage(m_db);usage.prepare("SELECT COALESCE(SUM(input_tokens),0),COALESCE(SUM(output_tokens),0) FROM loop_metrics WHERE root_run=?");usage.addBindValue(rootRun);usage.exec();usage.next();
+        if(usage.value(0).toLongLong()>=policy["parent_input_token_budget"].toInteger()||usage.value(1).toLongLong()>=policy["parent_output_token_budget"].toInteger())return fail(tr("The parent run's reported token budget is exhausted."));
+    }
     const QString id = QUuid::createUuid().toString(QUuid::Id128), path = m_directory + "/" + id;
+    if(rootRun.isEmpty())rootRun=id;
+
     if (!QDir().mkpath(path))
         return fail(tr("Could not create the agent workspace."));
     QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
@@ -199,6 +219,9 @@ QString AgentService::start(const QString &prompt, const QVariantMap &target, co
         QDir(path).removeRecursively();
         return fail(tr("Could not save the agent job."));
     }
+    QSqlQuery metrics(m_db);metrics.prepare("INSERT INTO loop_metrics(run,root_run,parent_run,depth,policy_revision,policy) VALUES(?,?,?,?,?,?)");
+    metrics.addBindValue(id);metrics.addBindValue(rootRun);metrics.addBindValue(previous.isNull()?QString(""):previous);metrics.addBindValue(depth);metrics.addBindValue(QString::fromLatin1(QCryptographicHash::hash(policyBytes,QCryptographicHash::Sha256).toHex()));metrics.addBindValue(QString::fromUtf8(policyBytes));
+    if(!metrics.exec()){finish(id,"attention",tr("Could not pin the loop policy."));return fail(tr("Could not pin the loop policy."));}
     auto *process = new QProcess(this);
 #ifdef Q_OS_LINUX
     const auto ownerPid = getpid();
@@ -216,7 +239,7 @@ QString AgentService::start(const QString &prompt, const QVariantMap &target, co
     m_problem.clear();
     auto *timeout = new QTimer(process);
     timeout->setSingleShot(true);
-    timeout->setInterval(15 * 60 * 1000);
+    timeout->setInterval(policy["max_wall_ms"].toInt());
     connect(timeout, &QTimer::timeout, this, [=] {
         finish(id, "attention", tr("Time limit reached. Review the output before continuing."));
         killAgent(process);
@@ -236,7 +259,7 @@ QString AgentService::start(const QString &prompt, const QVariantMap &target, co
         QFile log(path + "/run.log");
         if (log.open(QIODevice::Append)) {
             log.write(chunk);
-            if (log.size() > 8 * 1024 * 1024) {
+            if (log.size() > policy["max_output_bytes"].toInteger()) {
                 finish(id, "attention", tr("Output limit reached. Review the log."));
                 killAgent(process);
                 return;
@@ -260,6 +283,7 @@ QString AgentService::start(const QString &prompt, const QVariantMap &target, co
     connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
             [=](int code, QProcess::ExitStatus exit) {
                 timeout->stop();
+                captureUsage(id);
                 m_processes.remove(id);
                 if (read(id)["state"] == "running")
                     finish(id, code == 0 && exit == QProcess::NormalExit ? "finished" : "attention",
@@ -310,4 +334,18 @@ bool AgentService::terminal(const QString &id) {
     return QProcess::startDetached("xdg-terminal-exec",
                                    {"--dir=" + job["path"].toString(), "--hold", "tail", "-n", "100", "-f",
                                     job["path"].toString() + "/run.log"});
+}
+
+void AgentService::captureUsage(const QString &id) {
+    auto job=read(id);QFile log(job["path"].toString()+"/run.log");if(!log.open(QIODevice::ReadOnly))return;
+    qint64 input=0,output=0;bool known=false;
+    while(!log.atEnd()){
+        const auto line=log.readLine(1048577);if(line.size()>1048576)return;
+        auto event=QJsonDocument::fromJson(line).object();
+        if(event["type"]!="turn.completed"&&event["type"]!="result")continue;
+        const auto usage=event["usage"].toObject();auto in=usage["input_tokens"],out=usage["output_tokens"];
+        if(!in.isDouble()||!out.isDouble()||in.toDouble()<0||out.toDouble()<0||in.toDouble()>1e12||out.toDouble()>1e12||in.toDouble()!=double(in.toInteger())||out.toDouble()!=double(out.toInteger()))return;
+        known=true;input+=in.toInteger();output+=out.toInteger();
+    }
+    if(known){QSqlQuery q(m_db);q.prepare("UPDATE loop_metrics SET usage_known=1,input_tokens=?,output_tokens=? WHERE run=?");q.addBindValue(input);q.addBindValue(output);q.addBindValue(id);q.exec();}
 }

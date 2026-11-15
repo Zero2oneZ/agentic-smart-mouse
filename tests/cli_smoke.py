@@ -80,6 +80,10 @@ with tempfile.TemporaryDirectory(prefix="hotbox-cli-") as temp:
     registry = call("architecture", "catalog", "--category", library_workspace)
     assert registry["attachments"] and len(registry["genres"]) == 1
     call("architecture", "ensure", "--category", library_workspace, "--capabilities", "music", "--artist", "../escape", expected=1)
+    loop=call("optimize")
+    assert loop["mode"]=="advisory_only" and loop["runs"]==0
+    assert loop["policy"]["id"]=="master-loop-v1"
+    call("optimize","--category",library_workspace,expected=1)
     health=call("doctor")
     assert health["ok"] and health["databaseOk"] and health["coreAvailable"]
     locations={row["name"]:row for row in health["storage"]}

@@ -876,6 +876,7 @@ QJsonArray Backend::toolDefinitions() const {
     };
     QJsonObject integer{{"type", "integer"}}, text{{"type", "string"}};
     return {
+        make("inspect_master_loop","Read aggregate master-loop evidence and optimization proposals. Master scope only. No source changes or execution.",{},{}),
         make(
             "read_architecture",
             "Read registered storage templates and this scope's existing project bindings; no file contents.",
@@ -916,6 +917,7 @@ QJsonArray Backend::toolDefinitions() const {
 QVariantMap Backend::contextTool(const QString &name, const QVariantMap &a, int scope) {
     if (scope == 0)
         scope = m_current;
+    if(name=="inspect_master_loop")return optimizerReport(scope);
     if (name == "read_architecture") {
         auto result = m_architecture->catalog(scope);
         // Keep the model index bounded. The full registry is available through the UI/CLI.

@@ -2,7 +2,7 @@
 
 ## Delivery boundary
 
-**Planned component and proposed prompt**, not an executable planner or swarm
+**The full model-assisted planner remains planned**, not an executable planner or swarm
 runtime. The [planner system prompt](../templates/prompts/orchestration-loop-planner-v1.md)
 adds a reusable definition to the design. It is not installed in the Qt model
 context. The current Rust engine still runs deterministic fixtures only; it has
@@ -194,3 +194,21 @@ replan during active work; verifier rejection; cancellation/revocation; unknown
 external effects; restart/resume without repeating accepted work; wait wakeup and
 missed-event recovery; private-output exclusion from catalog exports. UI tests stay
 offscreen. No active desktop input injection or real credentials in fixtures.
+
+
+## Current master optimization checkpoint
+
+The Qt supervised-run adapter now pins `src/master-loop-policy.json` by digest
+and preserves parent/follow-up lineage in private `loop_metrics` rows. Global
+`hotbox optimize` is a read-only advisor over the latest 1,000 agent runs, plus
+aggregate recorded context size. It identifies unknown usage, runs needing
+attention and repeated prompts as investigation candidates, not proven savings.
+Token fields accept recognized provider terminal-event receipts; text-only logs
+remain unknown. Current process/time/output/follow-up limits are enforced, while
+token checks can stop future follow-ups only after reported usage reaches the
+parent limit. This is not an in-flight token cap or full Rust planner adapter.
+
+The proposed master optimizer role is defined in
+`templates/prompts/master-tree-optimizer-v1.md`. Model-assisted evaluation and
+automatic promotion are not enabled. The existing native kernel remains the
+intended controller/scheduler; this adapter does not create a competing scheduler.

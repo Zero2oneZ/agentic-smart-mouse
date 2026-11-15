@@ -1,11 +1,44 @@
 # Standalone orchestration implementation plan
 
+## Primary concern: orchestration and measured improvement
+
+The orchestration loop and its optimization are foundational, not a feature added
+after GUI polish. New execution capabilities must plug into the existing plan,
+lease, checkpoint, budget and verification contracts. See the
+[loop planner](ORCHESTRATION_LOOP_PLANNER.md) and
+[master-tree optimizer definition](../templates/prompts/master-tree-optimizer-v1.md).
+
+Current Qt adapter increment: a versioned master-loop policy is pinned per agent
+run, follow-ups retain parent lineage/policy and known-usage budget accounting,
+and `hotbox optimize` reports private evidence gaps and proposed improvements.
+It does not auto-dispatch, run an optimizer model, edit the master tree, or replace
+the Rust scheduler. Unknown usage is explicit. Provider log receipts currently
+support recognized structured terminal usage events; ordinary text-only output
+has unknown usage. Aggregate token enforcement checks reported receipts before
+future follow-ups; it cannot impose an in-flight provider token ceiling.
+
+Next acceptance gates, in order:
+
+1. Connect reliable provider usage receipts, pinned model/environment versions and independent artifact checks.
+2. Connect native ready-node dispatch to existing Rust leases/checkpoints, without
+   another planner call for unchanged eligible work.
+3. Reserve planning, worker, verifier, retry and optimization budgets under one
+   parent. Set explicit wake/deadline and no-progress/replan bounds.
+4. Evaluate context selection and tree/recipe candidates against fixed tasks;
+   promote immutable revisions only after quality/cost checks and a rollback ref.
+5. Add a model-assisted optimizer using the same proposal/validation boundary.
+
+The `uv` environment contract is also a dependency of repeatable dispatch:
+project source owns `pyproject.toml` and the lock; private environments are pinned
+by project/lock/Python/platform/profile; runs record references, and active
+environments are not modified. The uv environment manager remains to be connected.
+
 ## First-release product sequence
 
 The [whole-product review](../../docs/PRODUCT_REVIEW.md) consolidates the product
-release order: clean UI/readiness, one deterministic end-to-end local job, one real
-supervised runner, smart evidence/model composition, then schedules/sharing/remote
-workers. Detailed increments below remain reference contracts; they do not require
+delivery slices: one deterministic end-to-end local job, one real supervised
+runner, and scoped evidence/model composition under the primary loop contracts.
+UI/readiness work supports those slices; schedules/sharing/remote workers follow. Detailed increments below remain reference contracts; they do not require
 exposing technical fields or completing every future backend before the first
 usable slice. Pass the review's failure/recovery and novice-usability gates before
 claiming everyday readiness.

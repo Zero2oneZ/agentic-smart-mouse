@@ -30,6 +30,7 @@ ColumnLayout {
    Layout.fillWidth:true;Layout.fillHeight:true
    Label {text:root.job.title||qsTr("No run selected");textFormat:Text.PlainText;font.pixelSize:20;Layout.fillWidth:true}
    Label {text:qsTr("%1 · %2").arg(root.identity.mark).arg(root.identity.route);textFormat:Text.PlainText;wrapMode:Text.Wrap;Layout.fillWidth:true;color:root.identity.color}
+   Label {visible:!!root.job.loop;Layout.fillWidth:true;wrapMode:Text.Wrap;color:"#aeb9c9";text:root.job.loop&&root.job.loop.usageKnown?qsTr("Reported tokens: %1 input / %2 output · follow-up %3").arg(root.job.loop.inputTokens).arg(root.job.loop.outputTokens).arg(root.job.loop.depth):qsTr("Token usage not reported · the loop will not assume zero")}
    Label {text:root.job.detail||"";textFormat:Text.PlainText;wrapMode:Text.Wrap;Layout.fillWidth:true;color:theme.accent}
    Label {text:root.job.prompt||"";textFormat:Text.PlainText;wrapMode:Text.Wrap;maximumLineCount:4;elide:Text.ElideRight;Layout.fillWidth:true}
    ScrollView {Layout.fillWidth:true;Layout.fillHeight:true

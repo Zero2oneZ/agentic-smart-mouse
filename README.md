@@ -49,7 +49,7 @@ The development machine uses a user-local install: executable in `~/.local/bin/h
 
 ## Verification
 
-Thirty-one Qt Test checks cover the application. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, context-tool round trips, architecture registration, shared-library reuse, and preservation of user files. Offscreen screenshots use sample content. The live overlay rendered successfully; the previous Tab + Q shortcut failed verification. The replacement Ctrl + Super bindings passed Lua callback checks and loaded in Hyprland without configuration errors; they still require a physical-keyboard check. The Super + numpad + binding is loaded without configuration errors. Numpad focus, NumLock aliases, recording recovery and browser import filtering pass offscreen tests; five browser-companion tests and the Lua keypad callback check pass. The companion has not been tested in a live browser. Keep desktop keyboard injection out of further automated checks.
+Thirty-two Qt Test checks cover the application. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, context-tool round trips, architecture registration, shared-library reuse, and preservation of user files. Offscreen screenshots use sample content. The live overlay rendered successfully; the previous Tab + Q shortcut failed verification. The replacement Ctrl + Super bindings passed Lua callback checks and loaded in Hyprland without configuration errors; they still require a physical-keyboard check. The Super + numpad + binding is loaded without configuration errors. Numpad focus, NumLock aliases, recording recovery and browser import filtering pass offscreen tests; five browser-companion tests and the Lua keypad callback check pass. The companion has not been tested in a live browser. Keep desktop keyboard injection out of further automated checks.
 
 ## Model connection
 
@@ -369,7 +369,7 @@ Verified locally: offline Qt checks, CLI workflow, installer WAL-backup/launcher
 
 `bin/build` is a strict full build and requires Cargo/Rust, qmake6, make and a C++ compiler. It reports missing tools before attempting compilation. `bin/build --desktop-only` explicitly rebuilds Qt while reusing an existing executable `build/hotbox-core`; it does not claim to rebuild Rust. `bin/install-local --desktop-only` stages and installs both binaries into `~/.local/bin` without restarting running jobs. Omit the flag when a full Rust toolchain is available.
 
-`bin/test --desktop-only --offline` creates a private temporary runtime directory for locks and runs the Qt suite except the three TCP mock-server tests. The exclusions are printed explicitly. The latest result is **28 passed, 0 failed**, with three network tests excluded. This includes real-helper local notes execution/recovery, managed Git worktrees/checkpoints, storage boundaries, agent lifecycle using a fake provider, feed details and QML checks. `bin/test-cli` also passes the complete sessions/Git/segments/architecture workflow and validates the storage report. These checks use temporary databases and repositories. Rust unit/integration sources were not rebuilt in this session because Cargo is unavailable.
+`bin/test --desktop-only --offline` creates a private temporary runtime directory for locks and runs the Qt suite except the three TCP mock-server tests. The exclusions are printed explicitly. The latest result is **29 passed, 0 failed**, with three network tests excluded. This includes real-helper local notes execution/recovery, managed Git worktrees/checkpoints, storage boundaries, agent lifecycle using a fake provider, feed details and QML checks. `bin/test-cli` also passes the complete sessions/Git/segments/architecture workflow and validates the storage report. These checks use temporary databases and repositories. Rust unit/integration sources were not rebuilt in this session because Cargo is unavailable.
 
 `hotbox doctor` emits JSON with the SQLite quick-check result, helper availability, source-tree placement, provider executable availability and actual storage locations. It does not test provider authentication. The installed app reports a healthy private database, available core helper, initialized architecture and runtime data outside a source repository. Empty placeholder `.git` directories are not treated as actual repositories. Files and storage also shows this map in the GUI.
 
@@ -388,3 +388,28 @@ These are sibling stores beneath the default private Hotbox data root; architect
 Control-only `hotbox quit`, `hold`, and `release` now use Qt Core IPC and do not initialize a display backend. An unreachable daemon produces an ordinary error instead of aborting Qt platform setup. Git checkpoint failures now distinguish an unwritable runtime lock directory from a genuinely busy worktree.
 
 Git hygiene: Python caches, private session exports and runtime trees are ignored. The user-local installer preserves live SQLite state through the backup API (including committed WAL data), saves previous binaries, stages both executables and launcher assets, and leaves running jobs untouched. `python tests/install_local_smoke.py` validates these behaviors in a temporary home.
+
+
+## Master loop optimization foundation
+
+Orchestration and measured improvement are the primary architecture concern.
+`hotbox optimize` returns a private, read-only optimization report in Master scope:
+run counts, parent families, reported token totals, unknown-usage coverage,
+context character counts and proposed investigations. Characters are not tokens,
+and process exit is not verified completion. No provider request or source edit is
+performed by this command.
+
+Each new headless run pins the bundled master-loop policy by digest. Follow-ups
+retain the parent policy and family budget; concurrency, wall time, output size
+and follow-up depth are bounded. Known token receipts can block later follow-ups
+when the parent budget is exhausted. Missing usage remains unknown; no in-flight
+provider token ceiling is claimed. Existing text-mode provider CLIs may not report
+structured usage, so token optimization is gated on connecting trustworthy usage
+receipts rather than guessing. Existing runs are not rewritten.
+
+See [primary implementation priorities](core/docs/PLAN.md) and the
+[master-tree optimizer role](core/templates/prompts/master-tree-optimizer-v1.md).
+The full model-assisted planner, automatic master-tree changes, independent
+verification adapter and uv environment registry are not connected yet.
+
+Master-loop validation: the offline Qt profile passes 29 checks (three TCP mock-server checks excluded), including usage aggregation, retained parent lineage, reported-budget exhaustion and Master-scope access. The CLI workflow validates `hotbox optimize` as a read-only report. No live model-assisted optimizer or provider token-cap enforcement is claimed.

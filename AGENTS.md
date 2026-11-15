@@ -29,3 +29,11 @@ capabilities before provisioning; never repoint existing capabilities, move medi
 or overwrite user files implicitly. Model architecture tools are read-only. The
 storage registry is not a container sandbox; do not claim isolation or launch
 containers through stored metadata. Preserve scoped bindings and lazy creation.
+
+Treat the orchestration loop and measured optimization as primary shared architecture.
+Extend the existing Rust plan/lease/checkpoint/verification contracts; do not add a
+competing scheduler. Pin policy and environment revisions per run, preserve parent
+budgets across follow-ups, and record missing provider usage as unknown. Optimizer
+proposals must not mutate active runs, user data, permissions or source definitions.
+Measure total planning/worker/verification/retry cost against verified outcomes
+before promoting a reusable architecture change.

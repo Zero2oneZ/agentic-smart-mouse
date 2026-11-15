@@ -31,6 +31,7 @@ class AgentService : public QObject {
     QVariantMap read(const QString &id) const;
     void publish();
     void finish(const QString &id, const QString &state, const QString &detail);
+    void captureUsage(const QString &id);
     QString m_directory, m_selected, m_problem;
     QSqlDatabase m_db;
     QTimer m_publishTimer;

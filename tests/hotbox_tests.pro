@@ -32,3 +32,5 @@ SOURCES += ../src/feedidentity.cpp
 SOURCES += ../src/activityfeed.cpp
 
 SOURCES += ../src/runtime.cpp
+
+SOURCES += ../src/loopoptimizer.cpp

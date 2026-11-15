@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     const bool headless = QStringList{"events",   "read-event", "attach", "record",     "focus",
                                       "snapshot", "branch",     "sync",   "git-config", "run"}
                               .contains(commandName) ||
-                          commandName == "doctor" || commandName == "segment" || commandName == "architecture";
+                          commandName == "optimize" || commandName == "doctor" || commandName == "segment" || commandName == "architecture";
     if (check || smoke || headless) {
         qputenv("QT_QPA_PLATFORM", "offscreen");
         qputenv("QT_QPA_PLATFORMTHEME", "");
@@ -116,7 +116,9 @@ int main(int argc, char **argv) {
         }
         QJsonObject result;
         int exitCode = 0;
-        if(command=="doctor") {
+        if(command=="optimize") {
+            result=QJsonObject::fromVariantMap(backend.optimizerReport());
+        } else if(command=="doctor") {
             result=QJsonObject::fromVariantMap(backend.runtimeReport());
         } else if (command == "architecture") {
             QString action = "catalog";

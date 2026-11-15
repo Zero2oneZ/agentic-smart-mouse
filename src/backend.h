@@ -51,6 +51,7 @@ class Backend : public QObject {
     Q_INVOKABLE QVariantList activityPage(qint64 before=0) const;
     Q_INVOKABLE QVariantMap activityDetail(qint64 id,int offset=0) const;
     Q_INVOKABLE QVariantMap runtimeReport() const;
+    Q_INVOKABLE QVariantMap optimizerReport(int scope=0) const;
     QVariantMap feedIdentity() const;
     Q_INVOKABLE QVariantMap identifyFeed(int category,const QStringList &path,const QString &spread,const QString &action,bool remember=false);
     AgentService *agents() const { return m_agents.get(); }
