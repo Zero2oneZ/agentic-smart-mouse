@@ -1,28 +1,32 @@
--- Hotbox: Tab arms Q; both must remain held for 500 ms in the app.
--- Tab remains non-consuming. Q is intercepted only while Tab is held.
-local hotbox_tab = false
+-- Hotbox: hold Ctrl + Super in either order for 300 ms in the app.
+-- Observe modifier keys without consuming them or binding ordinary letters.
 local hotbox_active = false
-local hotbox_q
+local function hold_hotbox()
+  if not hotbox_active then
+    hotbox_active = true
+    hl.exec_cmd("hotbox hold")
+  end
+end
 local function release_hotbox()
   if hotbox_active then
     hotbox_active = false
     hl.exec_cmd("hotbox release")
   end
 end
-hotbox_q = hl.bind("Q", function()
-  if hotbox_tab and not hotbox_active then
-    hotbox_active = true
-    hl.exec_cmd("hotbox hold")
-  end
-end, { description = "Hotbox (hold Tab + Q for 0.5 seconds)" })
-hotbox_q:set_enabled(false)
-hl.bind("TAB", function()
-  hotbox_tab = true
-  hotbox_q:set_enabled(true)
-end, { non_consuming = true })
-hl.bind("TAB", function()
-  hotbox_tab = false
-  hotbox_q:set_enabled(false)
-  release_hotbox()
-end, { release = true, transparent = true, ignore_mods = true, non_consuming = true })
-hl.bind("Q", release_hotbox, { release = true, transparent = true, ignore_mods = true, non_consuming = true })
+for _, key in ipairs({ "Super_L", "Super_R" }) do
+  hl.bind("CTRL + " .. key, hold_hotbox, {
+    non_consuming = true,
+    description = "Hotbox (hold Ctrl + Super for 0.3 seconds)",
+  })
+end
+for _, key in ipairs({ "Control_L", "Control_R" }) do
+  hl.bind("SUPER + " .. key, hold_hotbox, {
+    non_consuming = true,
+    description = "Hotbox (hold Ctrl + Super for 0.3 seconds)",
+  })
+end
+for _, key in ipairs({ "Control_L", "Control_R", "Super_L", "Super_R" }) do
+  hl.bind(key, release_hotbox, {
+    release = true, transparent = true, ignore_mods = true, non_consuming = true,
+  })
+end

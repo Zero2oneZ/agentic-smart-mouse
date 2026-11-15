@@ -61,9 +61,10 @@ class HotboxTests : public QObject {
         QCOMPARE(shown.size(), 0);
         QVERIFY(!b.expanded());
         b.hold();
-        QTest::qWait(300);
+        QTest::qWait(150);
+        QVERIFY(!b.expanded());
         b.hold();
-        QTRY_VERIFY_WITH_TIMEOUT(b.expanded(), 400);
+        QTRY_VERIFY_WITH_TIMEOUT(b.expanded(), 250);
         QCOMPARE(shown.size(), 1);
         b.release();
         QVERIFY(!b.expanded());

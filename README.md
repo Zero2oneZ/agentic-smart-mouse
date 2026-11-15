@@ -4,9 +4,9 @@
 
 A native Omarchy hotbox with persistent category chats, project briefs, folder links, and live shortcut search.
 
-The intended global gesture is to hold **Tab first, then Q** for 0.5 seconds. The menu expands at the pointer; release either key to retract. Click a choice, right-click for deeper actions, or double-click the center for master chat.
+The intended global gesture is to hold **Ctrl + Super** in either order for 0.3 seconds. The menu expands at the pointer; release either key to retract. Click a choice, right-click for deeper actions, or double-click the center for master chat.
 
-The global shortcut is experimental and currently disabled on the development machine after unexpected input during desktop keyboard simulation. Physical-keyboard activation remains unverified. Use `hotbox open` for chat and its **Preview hotbox** button for the menu. Tab reaches the focused app and may change its focus; the proposed integration consumes Q while Tab is held.
+The global shortcut observes Ctrl and Super without consuming them. Left and right modifier keys are supported. Physical-keyboard activation remains unverified; use `hotbox open` and its **Preview hotbox** button as an alternative.
 
 ## Build and run
 
@@ -14,13 +14,13 @@ The global shortcut is experimental and currently disabled on the development ma
 
 `hotbox check --json` reports database and model configuration status without a display. `hotbox --smoke OUTPUT_DIRECTORY` renders sample chat and menu screenshots offscreen, using an isolated database.
 
-The development machine uses a user-local install: executable in `~/.local/bin/hotbox`, desktop entry in `~/.local/share/applications/`, and experimental integration in `~/.local/share/hotbox/hotbox.lua`. Startup is configured in the user's Hyprland autostart; the integration source line in their bindings is commented out. System package installation was not completed because sudo authentication was required.
+The development machine uses a user-local install: executable in `~/.local/bin/hotbox`, desktop entry in `~/.local/share/applications/`, and keyboard integration in `~/.local/share/hotbox/hotbox.lua`. Startup is configured in the user's Hyprland autostart; their bindings load the integration file. System package installation was not completed because sudo authentication was required.
 
-`integration/hotbox.lua` contains the proposed global bindings for later repair and manual verification. The Arch package installs that file at `/usr/share/hotbox/hotbox.lua`. Configuration changes require `hyprctl reload` and `hyprctl configerrors`. Do not enable the global integration automatically.
+`integration/hotbox.lua` contains the Ctrl + Super bindings. The Arch package installs that file at `/usr/share/hotbox/hotbox.lua`. Configuration changes require `hyprctl reload` and `hyprctl configerrors`. Install or change desktop bindings only when explicitly requested.
 
 ## Verification
 
-Eighteen Qt Test checks cover the application. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, and context-tool round trips. Offscreen screenshots use sample content. The live overlay rendered successfully; global shortcut verification did not pass. Keep desktop keyboard injection out of further automated checks.
+Eighteen Qt Test checks cover the application. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, and context-tool round trips. Offscreen screenshots use sample content. The live overlay rendered successfully; the previous Tab + Q shortcut failed verification. The replacement Ctrl + Super bindings passed Lua callback checks and loaded in Hyprland without configuration errors; they still require a physical-keyboard check. Keep desktop keyboard injection out of further automated checks.
 
 ## Model connection
 
@@ -36,7 +36,7 @@ SQLite in `~/.local/share/hotbox/hotbox.sqlite3` stores category hierarchy, mess
 
 | Keys | Action |
 | --- | --- |
-| Hold Tab then Q | Hotbox after 500 ms |
+| Hold Ctrl + Super | Hotbox after 300 ms |
 | Release either key | Retract without launching |
 | Ctrl+K | Search Omarchy bindings |
 | Ctrl+N | Add category |

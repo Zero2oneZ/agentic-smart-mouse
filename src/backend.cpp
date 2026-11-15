@@ -114,7 +114,7 @@ Backend::Backend(const QString &directory, QObject *parent) : QObject(parent) {
     }
     m_activityPoll.start();
     m_hold.setSingleShot(true);
-    m_hold.setInterval(500);
+    m_hold.setInterval(300);
     connect(&m_hold, &QTimer::timeout, this, [this] {
         if (m_held) {
             m_expanded = true;

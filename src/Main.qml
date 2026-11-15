@@ -68,7 +68,7 @@ ApplicationWindow {
      Button {text:qsTr("Session timeline");Layout.fillWidth:true;flat:true;onClicked:win.page="timeline"}
      Button {text:qsTr("Model settings");Layout.fillWidth:true;flat:true;onClicked:settings.open()}
      Button {text:qsTr("Archived categories");Layout.fillWidth:true;flat:true;onClicked:archiveDialog.open()}
-     Label {text:qsTr("Hold Tab + Q · 0.5 seconds");color:"#858b99";font.pixelSize:11;Layout.alignment:Qt.AlignHCenter}
+     Label {text:qsTr("Hold Ctrl + Super · 0.3 seconds");color:"#858b99";font.pixelSize:11;Layout.alignment:Qt.AlignHCenter}
      Button {text:qsTr("Preview hotbox");Layout.fillWidth:true;flat:true;onClicked:backend.preview()}
     }
    }
@@ -202,7 +202,7 @@ ApplicationWindow {
   }
  }
  Dialog {id:help;anchors.centerIn:parent;width:520;modal:true;title:qsTr("Hotbox controls");standardButtons:Dialog.Close
-  Label {width:parent.width;wrapMode:Text.Wrap;text:qsTr("Hold Tab, then Q for 0.5 seconds to spread the menu at your pointer. Release either key to retract. Click an item to choose; right-click for deeper options. Double-click the center for master chat.\n\nCtrl+K: search keybindings\nCtrl+N: add category\nCtrl+,: model settings\nCtrl+Q: quit Hotbox\n?: this help\n\nThe Preview hotbox button opens a click-controlled preview. Click the background to dismiss it.")}
+  Label {width:parent.width;wrapMode:Text.Wrap;text:qsTr("Hold Ctrl + Super for 0.3 seconds to spread the menu at your pointer. Release either key to retract. Click an item to choose; right-click for deeper options. Double-click the center for master chat.\n\nCtrl+K: search keybindings\nCtrl+N: add category\nCtrl+,: model settings\nCtrl+Q: quit Hotbox\n?: this help\n\nThe Preview hotbox button opens a click-controlled preview. Click the background to dismiss it.")}
  }
  Hotbox {id:overlay;objectName:"hotboxOverlay";owner:win}
 }

@@ -61,7 +61,7 @@ for source, destination in files:
     temporary = destination.with_name(destination.name + '.installing')
     shutil.copy2(source, temporary)
     os.replace(temporary, destination)
-# Leave the experimental global keyboard integration disabled and untouched.
+# Leave desktop keyboard integration untouched; configure it only on explicit request.
 state = Path(os.environ.get('XDG_STATE_HOME', str(home / '.local/state'))) / 'hotbox'
 state.mkdir(parents=True, exist_ok=True)
 state.chmod(0o700)
