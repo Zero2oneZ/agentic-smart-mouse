@@ -29,6 +29,14 @@ As of this build checkpoint:
   builder. Current headless jobs use private starter directories; they do not
   automatically edit the selected project's source.
 
+## Contract normalization checkpoint
+
+The [contract audit](../../docs/CONTRACT_AUDIT.md) maps the implemented desktop
+ledger and supervised loop against remaining Rust/provider gates. The build API
+now has a shared machine-readable field/enum catalog, runtime-driven GUI kinds,
+a generated reference and build/CLI drift checks. This normalizes that interface;
+other subsystem contracts and most roadmap acceptance contracts remain to audit.
+
 ## Product milestone
 
 A user selects a project, states one bounded change and receives a tested artifact

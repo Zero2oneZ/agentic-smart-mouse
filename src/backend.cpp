@@ -1206,6 +1206,6 @@ void Backend::openAgent(const QString &id,const QString &view) {
 
 QVariantMap Backend::buildAction(const QString &operation,const QVariantMap &arguments) {
     auto result=m_build->call(m_current,operation,arguments);
-    if(result.value("ok").toBool()&&!QStringList{"contract.read","guide","schema","list","read","history","document.read","checkpoint.read"}.contains(operation)){emit activityChanged();emit changed();}
+    if(result.value("ok").toBool()&&!BuildLedger::isRead(operation)){emit activityChanged();emit changed();}
     return result;
 }

@@ -1,4 +1,6 @@
 #!/bin/sh
 set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+"$ROOT/bin/check-contracts" --binary "$ROOT/build/hotbox"
+python3 "$ROOT/tests/contract_reference_smoke.py" "$ROOT/build/hotbox"
 exec python3 "$ROOT/tests/cli_smoke.py" "$ROOT/build/hotbox"

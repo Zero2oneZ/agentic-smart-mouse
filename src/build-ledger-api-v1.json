@@ -1,0 +1,318 @@
+{
+  "schema_version": 1,
+  "api": "hotbox.build",
+  "contract_id": "hotbox.build.v1",
+  "storage_version": 2,
+  "semantics": "idempotent_mutations_with_expected_revision",
+  "integer_fields": [
+    "schema_version",
+    "expected_revision",
+    "offset",
+    "before"
+  ],
+  "node_kinds": [
+    "milestone",
+    "checkpoint",
+    "step",
+    "substep",
+    "issue",
+    "test",
+    "debug",
+    "documentation",
+    "idea",
+    "addition",
+    "decision",
+    "contract"
+  ],
+  "planning_states": [
+    "proposed",
+    "planned",
+    "in_progress",
+    "blocked",
+    "recorded",
+    "archived"
+  ],
+  "link_kinds": [
+    "agent_run",
+    "chat_event",
+    "terminal_command"
+  ],
+  "operations": {
+    "schema": {
+      "mode": "read",
+      "fields": [],
+      "required": [],
+      "summary": "Discover the local API catalog."
+    },
+    "list": {
+      "mode": "read",
+      "fields": [],
+      "required": [],
+      "summary": "List up to 100 visible roadmaps."
+    },
+    "read": {
+      "mode": "read",
+      "fields": [
+        "roadmap"
+      ],
+      "required": [
+        "roadmap"
+      ],
+      "summary": "Read bounded roadmap state and version references."
+    },
+    "guide": {
+      "mode": "read",
+      "fields": [
+        "roadmap",
+        "node"
+      ],
+      "required": [
+        "roadmap"
+      ],
+      "summary": "Read bounded reference guidance; never dispatch or acceptance authority."
+    },
+    "contract.read": {
+      "mode": "read",
+      "fields": [
+        "roadmap",
+        "contract"
+      ],
+      "required": [
+        "roadmap",
+        "contract"
+      ],
+      "summary": "Read one scoped immutable acceptance contract."
+    },
+    "document.read": {
+      "mode": "read",
+      "fields": [
+        "roadmap",
+        "version",
+        "offset"
+      ],
+      "required": [
+        "roadmap",
+        "version"
+      ],
+      "summary": "Read document text in 6000-character pages."
+    },
+    "checkpoint.read": {
+      "mode": "read",
+      "fields": [
+        "roadmap",
+        "checkpoint"
+      ],
+      "required": [
+        "roadmap",
+        "checkpoint"
+      ],
+      "summary": "Read a saved pre-mutation roadmap snapshot."
+    },
+    "history": {
+      "mode": "read",
+      "fields": [
+        "roadmap",
+        "before"
+      ],
+      "required": [
+        "roadmap"
+      ],
+      "summary": "Read up to 40 changes before a revision; zero starts newest."
+    },
+    "create": {
+      "mode": "mutation",
+      "fields": [
+        "request_id",
+        "title",
+        "branch_ref",
+        "commit_ref"
+      ],
+      "required": [
+        "request_id",
+        "title"
+      ],
+      "summary": "Create a roadmap with declared Git provenance."
+    },
+    "node.add": {
+      "mode": "mutation",
+      "fields": [
+        "request_id",
+        "roadmap",
+        "expected_revision",
+        "parent",
+        "kind",
+        "title",
+        "body"
+      ],
+      "required": [
+        "request_id",
+        "roadmap",
+        "expected_revision",
+        "kind",
+        "title"
+      ],
+      "summary": "Add a planning item; substeps require a parent."
+    },
+    "node.update": {
+      "mode": "mutation",
+      "fields": [
+        "request_id",
+        "roadmap",
+        "expected_revision",
+        "node",
+        "state",
+        "body"
+      ],
+      "required": [
+        "request_id",
+        "roadmap",
+        "expected_revision",
+        "node",
+        "state"
+      ],
+      "summary": "Update planning state/body; cannot certify functionality."
+    },
+    "contract.save": {
+      "mode": "mutation",
+      "fields": [
+        "request_id",
+        "roadmap",
+        "expected_revision",
+        "node",
+        "parent_contract",
+        "acceptance",
+        "implementation",
+        "verification"
+      ],
+      "required": [
+        "request_id",
+        "roadmap",
+        "expected_revision",
+        "node",
+        "acceptance",
+        "implementation",
+        "verification"
+      ],
+      "summary": "Append a contract version; updates require the latest parent_contract."
+    },
+    "document.save": {
+      "mode": "mutation",
+      "fields": [
+        "request_id",
+        "roadmap",
+        "expected_revision",
+        "node",
+        "document",
+        "parent_version",
+        "title",
+        "content",
+        "branch_ref",
+        "commit_ref"
+      ],
+      "required": [
+        "request_id",
+        "roadmap",
+        "expected_revision",
+        "content"
+      ],
+      "summary": "Append a document version; new documents require title, updates require document and latest parent_version."
+    },
+    "link": {
+      "mode": "mutation",
+      "fields": [
+        "request_id",
+        "roadmap",
+        "expected_revision",
+        "node",
+        "kind",
+        "ref"
+      ],
+      "required": [
+        "request_id",
+        "roadmap",
+        "expected_revision",
+        "kind",
+        "ref"
+      ],
+      "summary": "Link existing scoped agent, chat or command evidence."
+    },
+    "checkpoint": {
+      "mode": "mutation",
+      "fields": [
+        "request_id",
+        "roadmap",
+        "expected_revision"
+      ],
+      "required": [
+        "request_id",
+        "roadmap",
+        "expected_revision"
+      ],
+      "summary": "Save a snapshot of the revision before this mutation."
+    },
+    "fork": {
+      "mode": "mutation",
+      "fields": [
+        "request_id",
+        "roadmap",
+        "expected_revision",
+        "title",
+        "branch_ref",
+        "commit_ref",
+        "checkpoint",
+        "node"
+      ],
+      "required": [
+        "request_id",
+        "roadmap",
+        "expected_revision",
+        "title"
+      ],
+      "summary": "Fork current/checkpoint state or a selected subtree; does not create a Git branch."
+    }
+  },
+  "implementation": [
+    {
+      "path": "src/buildledger.cpp",
+      "symbol": "BuildLedger::call"
+    },
+    {
+      "path": "src/buildledger.cpp",
+      "symbol": "BuildLedger::guide"
+    },
+    {
+      "path": "src/backend.cpp",
+      "symbol": "Backend::buildAction"
+    },
+    {
+      "path": "src/Builds.qml",
+      "symbol": "buildLedgerView"
+    },
+    {
+      "path": "src/main.cpp",
+      "symbol": "buildContext"
+    },
+    {
+      "path": "src/agentservice.cpp",
+      "symbol": "m_buildContext"
+    }
+  ],
+  "verification": [
+    {
+      "path": "tests/hotbox_tests.cpp",
+      "symbol": "rollingLedgerContractsGuideAndForkEvidence"
+    },
+    {
+      "path": "tests/hotbox_tests.cpp",
+      "symbol": "rollingLedgerMigratesVersionOneAndProtectsContracts"
+    },
+    {
+      "path": "tests/hotbox_tests.cpp",
+      "symbol": "agentRunsBindToBuildStepsBeforeLaunch"
+    },
+    {
+      "path": "tests/cli_smoke.py",
+      "symbol": "contract_match"
+    }
+  ]
+}

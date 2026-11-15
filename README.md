@@ -47,6 +47,8 @@ specialties, but the first team is only a builder and independent verifier with
 ordinary code controlling preparation, accounting and dispatch. These are planned
 definitions, not newly launched workers or enabled swarm capabilities.
 
+The [contract audit](docs/CONTRACT_AUDIT.md) maps implemented behavior, partial integrations and planned work to source and verification references. Build/CLI checks now reject drift between the canonical build API, generated reference and compiled catalog.
+
 ## Build roadmap and evidence
 
 The **Build roadmap** sidebar now stores milestones, steps, substeps, issues and
@@ -434,4 +436,4 @@ See [primary implementation priorities](core/docs/PLAN.md) and the
 The full model-assisted planner, automatic master-tree changes, independent
 verification adapter and uv environment registry are not connected yet.
 
-Master-loop validation: the offline Qt profile passes 29 checks (three TCP mock-server checks excluded), including usage aggregation, retained parent lineage, reported-budget exhaustion and Master-scope access. The CLI workflow validates `hotbox optimize` as a read-only report. No live model-assisted optimizer or provider token-cap enforcement is claimed.
+Master-loop validation is included in the [offline verification profile](#verification), covering usage aggregation, retained parent lineage, reported-budget exhaustion and Master-scope access. The CLI workflow validates `hotbox optimize` as a read-only report. No live model-assisted optimizer or provider token-cap enforcement is claimed.

@@ -5,6 +5,7 @@ import QtQuick.Layouts
 ColumnLayout {
  id:root
  objectName:"buildLedgerView"
+ property var catalog:({})
  property var roads:[]
  property var road:({})
  property string step:""
@@ -13,11 +14,11 @@ ColumnLayout {
  property var contract:({})
  property var guidance:({})
  property bool documentLatest:{if(!document.version)return true;for(var item of road.documents||[])if(item.document===document.document&&item.number>document.number)return false;return true}
- function call(operation,args){var request=Object.assign({schema_version:1},args||{});if(!["contract.read","guide","schema","list","read","history","document.read","checkpoint.read"].includes(operation)){request.request_id=Date.now()+"-"+Math.random();if(road.id&&operation!=="create")request.expected_revision=road.revision}var result=backend.buildAction(operation,request);problem=result.error||"";return result}
+ function call(operation,args){var request=Object.assign({schema_version:1},args||{});if(operation!=="schema"&&!(root.catalog.read_operations||[]).includes(operation)){request.request_id=Date.now()+"-"+Math.random();if(road.id&&operation!=="create")request.expected_revision=road.revision}var result=backend.buildAction(operation,request);problem=result.error||"";return result}
  function refresh(){roads=call("list",{}).roadmaps||[];if(road.id){var current=call("read",{roadmap:road.id});if(current.ok)road=current}}
  function choose(id){road=call("read",{roadmap:id});step="";document={}}
  function mutate(operation,args){var result=call(operation,Object.assign({roadmap:road.id},args||{}));if(result.ok){if(operation==="fork")choose(result.roadmap);refresh()}return result}
- Component.onCompleted:refresh()
+ Component.onCompleted:{catalog=backend.buildAction("schema",{schema_version:1});if(catalog.ok)refresh();else problem=catalog.error||""}
  Connections {target:backend;function onActivityChanged(){root.refresh()}}
  Label {text:qsTr("Build roadmap");font.pixelSize:23;Layout.fillWidth:true}
  Label {text:qsTr("Milestones, steps, evidence and document history stay linked to Master chat. Planning state is separate from verified execution.");wrapMode:Text.Wrap;Layout.fillWidth:true;color:"#aeb9c9"}
@@ -49,7 +50,7 @@ ColumnLayout {
     }
    }
    RowLayout {
-    Button {text:qsTr("Record issue");enabled:!!root.road.id;onClicked:{nodeKind.currentIndex=4;nodeDialog.open()}}
+    Button {text:qsTr("Record issue");enabled:!!root.road.id;onClicked:{nodeKind.currentIndex=Math.max(0,(root.catalog.node_kinds||[]).indexOf("issue"));nodeDialog.open()}}
     Button {text:qsTr("Mark blocked");enabled:!!root.step;onClicked:root.mutate("node.update",{node:root.step,state:"blocked"})}
     Button {text:qsTr("Add document");enabled:!!root.road.id;onClicked:{root.document={};docTitle.clear();docBody.clear();documentDialog.open()}}
     Button {text:qsTr("Prompt step");enabled:!!root.step;onClicked:runDialog.open()}
@@ -67,7 +68,7 @@ ColumnLayout {
  Dialog {id:nodeDialog;title:qsTr("Add roadmap item");modal:true;anchors.centerIn:parent;width:420;standardButtons:Dialog.Save|Dialog.Cancel
   onAccepted:{var result=root.mutate("node.add",{parent:root.step,kind:nodeKind.currentText,title:nodeTitle.text,body:nodeBody.text});if(result.ok){root.step=result.node;nodeTitle.clear();nodeBody.clear()}}
   ColumnLayout {anchors.fill:parent
-   ComboBox {id:nodeKind;model:["milestone","checkpoint","step","substep","issue","test","debug","documentation","idea","addition","decision","contract"];Layout.fillWidth:true}
+   ComboBox {id:nodeKind;model:root.catalog.node_kinds||[];Layout.fillWidth:true}
    TextField {id:nodeTitle;placeholderText:qsTr("Title");maximumLength:160;Layout.fillWidth:true}
    TextArea {id:nodeBody;placeholderText:qsTr("Goal, acceptance checks or issue details");Layout.fillWidth:true;Layout.preferredHeight:100;wrapMode:TextEdit.Wrap}
    Label {text:root.step?qsTr("Added under the selected item"):qsTr("Added at roadmap root");color:"#aeb9c9"}

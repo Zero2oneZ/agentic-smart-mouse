@@ -133,34 +133,22 @@ QVariantMap BuildLedger::call(int scope, const QString &operation, const QVarian
         return error(m_problem);
     if (a.value("schema_version").toInt() != 1)
         return error("schema_version must be 1");
-    const QMap<QString, QStringList> fields{
-        {"list", {}},
-        {"schema", {}},
-        {"read", {"roadmap"}},
-        {"guide", {"roadmap", "node"}},
-        {"contract.read", {"roadmap", "contract"}},
-        {"contract.save",
-         {"request_id", "roadmap", "expected_revision", "node", "parent_contract", "acceptance",
-          "implementation", "verification"}},
-        {"document.read", {"roadmap", "version", "offset"}},
-        {"checkpoint.read", {"roadmap", "checkpoint"}},
-        {"history", {"roadmap", "before"}},
-        {"create", {"request_id", "title", "branch_ref", "commit_ref"}},
-        {"node.add", {"request_id", "roadmap", "expected_revision", "parent", "kind", "title", "body"}},
-        {"node.update", {"request_id", "roadmap", "expected_revision", "node", "state", "body"}},
-        {"document.save",
-         {"request_id", "roadmap", "expected_revision", "node", "document", "parent_version", "title",
-          "content", "branch_ref", "commit_ref"}},
-        {"link", {"request_id", "roadmap", "expected_revision", "node", "kind", "ref"}},
-        {"checkpoint", {"request_id", "roadmap", "expected_revision"}},
-        {"fork",
-         {"request_id", "roadmap", "expected_revision", "title", "branch_ref", "commit_ref", "checkpoint",
-          "node"}}};
-    if (!fields.contains(operation))
+    const auto contract = catalog();
+    const auto operations = contract.value("operations").toMap();
+    if (contract.value("schema_version").toInt() != 1 || operations.isEmpty())
+        return error("Build API contract is unavailable");
+    if (!operations.contains(operation))
         return error("Unknown build operation");
+    const auto descriptor = operations.value(operation).toMap();
+    auto strings = [](const QVariant &value) {
+        QStringList result;
+        for (auto item : value.toList())
+            result.append(item.toString());
+        return result;
+    };
+    const auto fields = strings(descriptor.value("fields"));
     for (auto it = a.begin(); it != a.end(); ++it) {
-        const bool numeric =
-            QStringList{"schema_version", "expected_revision", "offset", "before"}.contains(it.key());
+        const bool numeric = strings(contract.value("integer_fields")).contains(it.key());
         if (numeric) {
             const int type = it.value().metaType().id();
             const auto number = it.value().toDouble();
@@ -172,27 +160,36 @@ QVariantMap BuildLedger::call(int scope, const QString &operation, const QVarian
                 return error("Expected a nonnegative integer: " + it.key());
         } else if (it.value().metaType().id() != QMetaType::QString)
             return error("Expected text: " + it.key());
-        if (it.key() != "schema_version" && !fields[operation].contains(it.key()))
+        if (it.key() != "schema_version" && !fields.contains(it.key()))
             return error("Unknown request field: " + it.key());
         if (it.value().metaType().id() == QMetaType::QString &&
             it.value().toString().size() > (it.key() == "content" ? 65536 : 4000))
             return error("Request field is too large: " + it.key());
     }
+    for (const auto &field : strings(descriptor.value("required")))
+        if (!a.contains(field))
+            return error("Missing request field: " + field);
     if (operation == "schema") {
-        QVariantMap operations;
-        for (auto i = fields.begin(); i != fields.end(); ++i)
-            operations[i.key()] = i.value();
-        return {
-            {"ok", true},
-            {"schema_version", 1},
-            {"api", "hotbox.build"},
-            {"operations", operations},
-            {"node_kinds", QStringList{"idea", "addition", "decision", "contract", "milestone", "checkpoint",
-                                       "step", "substep", "issue", "test", "debug", "documentation"}},
-            {"planning_states",
-             QStringList{"proposed", "planned", "in_progress", "blocked", "recorded", "archived"}},
-            {"link_kinds", QStringList{"agent_run", "chat_event", "terminal_command"}},
-            {"semantics", "idempotent_mutations_with_expected_revision"}};
+        QVariantMap fieldsByOperation;
+        QStringList readers;
+        for (auto it = operations.begin(); it != operations.end(); ++it) {
+            auto definition = it.value().toMap();
+            fieldsByOperation[it.key()] = strings(definition.value("fields"));
+            if (definition.value("mode") == "read")
+                readers.append(it.key());
+        }
+        return {{"ok", true},
+                {"schema_version", 1},
+                {"api", contract.value("api")},
+                {"contract_id", contract.value("contract_id")},
+                {"storage_version", contract.value("storage_version")},
+                {"operations", fieldsByOperation},
+                {"operation_contracts", operations},
+                {"read_operations", readers},
+                {"node_kinds", strings(contract.value("node_kinds"))},
+                {"planning_states", strings(contract.value("planning_states"))},
+                {"link_kinds", strings(contract.value("link_kinds"))},
+                {"semantics", contract.value("semantics")}};
     }
     if (operation == "list") {
         QSqlQuery q("SELECT id,category,title,revision,created FROM build_roads ORDER BY rowid DESC", m_db);
@@ -455,9 +452,7 @@ QVariantMap BuildLedger::call(int scope, const QString &operation, const QVarian
         if (title.isEmpty())
             return fail("A step title is required");
         auto kind = a.value("kind").toString();
-        if (!QStringList{"idea", "addition", "decision", "contract", "milestone", "checkpoint", "step",
-                         "substep", "issue", "test", "debug", "documentation"}
-                 .contains(kind))
+        if (!strings(contract.value("node_kinds")).contains(kind))
             return fail("Unknown step kind");
         const auto parent = a.value("parent").toString();
         if (kind == "substep" && parent.isEmpty())
@@ -477,8 +472,7 @@ QVariantMap BuildLedger::call(int scope, const QString &operation, const QVarian
         if (node.isEmpty())
             return fail("Select a step");
         auto state = a.value("state").toString();
-        if (!QStringList{"proposed", "planned", "in_progress", "blocked", "recorded", "archived"}.contains(
-                state))
+        if (!strings(contract.value("planning_states")).contains(state))
             return fail("Unknown planning state; verification is owned by the core");
         if (!sql("UPDATE build_nodes SET state=?,body=COALESCE(?,body) WHERE id=? AND road=?",
                  {state,
@@ -578,6 +572,8 @@ QVariantMap BuildLedger::call(int scope, const QString &operation, const QVarian
         response["digest"] = hash;
     } else if (operation == "link") {
         auto kind = a.value("kind").toString(), ref = a.value("ref").toString();
+        if (!strings(contract.value("link_kinds")).contains(kind))
+            return fail("Unknown link kind");
         QSqlQuery check(m_db);
         if (kind == "agent_run") {
             check.prepare("SELECT 1 FROM agent_runs WHERE id=?");
@@ -769,4 +765,17 @@ QVariantMap BuildLedger::guide(int scope, const QVariantMap &road, const QString
                  "confirm functionality. Fetch full contracts/documents by their version references."}};
     result["digest"] = digest(encoded(result));
     return result;
+}
+
+QVariantMap BuildLedger::catalog() {
+    static const QVariantMap contract = []() {
+        QFile file(":/build-ledger-api-v1.json");
+        if (!file.open(QIODevice::ReadOnly))
+            return QVariantMap{};
+        return QJsonDocument::fromJson(file.readAll()).object().toVariantMap();
+    }();
+    return contract;
+}
+bool BuildLedger::isRead(const QString &operation) {
+    return catalog().value("operations").toMap().value(operation).toMap().value("mode").toString() == "read";
 }

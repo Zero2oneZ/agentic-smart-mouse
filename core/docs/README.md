@@ -1,12 +1,17 @@
 # Rust core documentation
 
-These documents describe the implementation in `core/` and the agreed direction
-for the larger system. **Implemented** means code exists in this crate. **Target**
-means an intended capability with no claim of runtime availability. The Qt app and Rust helper use separate databases; a bounded bridge connects
-the fixed local notes recipe. General orchestration adapters remain separate.
+These documents describe the Rust implementation and the larger Hotbox design.
+**Implemented** names an owning component: Qt capabilities may be implemented
+without a general Rust adapter. **Partial** marks an implemented slice of a larger
+contract. **Planned/Target** means a runtime connection is absent. The Qt app and
+Rust helper use separate databases; a bounded bridge connects the fixed notes
+recipe. The Qt rolling ledger feeds supervised worker context without supplying
+general leased agent dispatch or independent acceptance.
 
 | Start here | Contents |
 | --- | --- |
+| [Contract audit](../../docs/CONTRACT_AUDIT.md) | Implemented/partial/planned capability map, direct references, findings and change workflow |
+| [Generated build API](BUILD_LEDGER_REFERENCE.md) | Shared catalog operations, fields, enums and checked source/test references |
 | [Build ledger API](BUILD_LEDGER_API.md) | Implemented SQL roadmap, versioned documents, scoped evidence and checkpoint/subtree forks |
 | [Build roadmap](BUILD_ROADMAP.md) | Ordered delivery stages, dependencies, runtime/data ownership and acceptance gates |
 | [Planned build swarm](PLANNED_SWARM_AGENTS.md) | Nine disabled/planned roles, capability boundaries, handoffs and parent-budget rules |
@@ -27,7 +32,8 @@ the fixed local notes recipe. General orchestration adapters remain separate.
 | [Orchestration loop planner](ORCHESTRATION_LOOP_PLANNER.md) | Initial planning, event-driven decisions, bounded replanning, verification and stopping |
 | [Implementation plan](PLAN.md) | Ordered increments and acceptance criteria for the remaining work |
 
-For the running desktop app, see the [project README](../../README.md). For code
+For the running desktop app, see the [project README](../../README.md). For Qt build-ledger behavior, use [the source contract](../../src/build-ledger-api-v1.json)
+and its [generated references](BUILD_LEDGER_REFERENCE.md). For Rust code
 behavior, the authority is [model.rs](../src/model.rs), [engine.rs](../src/engine.rs),
 [permissions.rs](../src/permissions.rs) and their [tests](../tests/kernel.rs).
 

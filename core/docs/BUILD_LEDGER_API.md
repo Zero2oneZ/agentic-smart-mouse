@@ -61,33 +61,26 @@ arguments fails. A stale revision fails without changing data. Refresh and revie
 before issuing a new request. Data changes, history, the Master event and the
 idempotency receipt commit in one SQL transaction.
 
-| Operation | Fields in addition to schema version |
-| --- | --- |
-| `schema`, `list` | None |
-| `read` | `roadmap` |
-| `history` | `roadmap`, optional `before` revision; 40 changes per page |
-| `document.read` | `roadmap`, `version`, optional character `offset`; chunks of 6,000 with `nextOffset` |
-| `checkpoint.read` | `roadmap`, `checkpoint` |
-| `create` | `request_id`, `title`, optional `branch_ref`, `commit_ref` |
-| `node.add` | `request_id`, `roadmap`, `expected_revision`, `kind`, `title`, optional `parent`, `body` |
-| `node.update` | Common mutation fields, `node`, `state`, optional `body` |
-| `document.save` | Common mutation fields, `content`; new document: `title`, optional `node`; next version: `document`, latest `parent_version`; optional declared Git refs |
-| `link` | Common mutation fields, `kind`, `ref`, optional `node` |
-| `checkpoint` | Common mutation fields |
-| `fork` | Common mutation fields, `title`, optional `checkpoint`, subtree root `node`, declared Git refs |
-
-Common mutation fields mean `request_id`, `roadmap`, `expected_revision`.
-Node kinds: `milestone`, `checkpoint`, `step`, `substep`, `issue`, `test`, `debug`,
-`documentation`. Substeps require a parent. Planning states: `planned`,
-`in_progress`, `blocked`, `recorded`, `archived`. `verified` is deliberately
-rejected. Link kinds: `agent_run`, `chat_event`, `terminal_command`; referenced
-records must exist and be visible. Command links require command events.
+The [generated API reference](BUILD_LEDGER_REFERENCE.md) lists every operation,
+required/optional field, integer field and enum. It is generated from
+[src/build-ledger-api-v1.json](../../src/build-ledger-api-v1.json), which also drives
+the runtime validator, read/mutation classification and the GUI's item kinds.
+Use `bin/check-contracts --binary build/hotbox` to check reference/runtime drift;
+regenerate with `bin/check-contracts --write` after an intentional contract change.
 
 Read collections are bounded and report limits: at most 1,000 nodes, document
-versions, links and checkpoints; read includes the latest 100 change summaries.
-New items beyond these bounds fail. List returns at most 100 visible roadmaps.
-Document content is limited to 65,536 characters and request files to 128,000
-bytes. History and document text have explicit pagination.
+versions, contract versions, links and checkpoints; read includes the latest 100
+change summaries. New items beyond these bounds fail. List returns at most 100
+visible roadmaps. Document content is limited to 65,536 characters and request
+files to 128,000 bytes. History returns 40 changes per page; document text returns
+6,000 characters per page. These semantic/storage limits are enforced in
+`BuildLedger::call`, `BuildLedger::read` and the CLI, rather than defined by the
+field catalog.
+
+Substeps require a parent. `node.update` requires `state` and optionally changes
+`body`. `verified` is deliberately rejected; planning state cannot certify a
+result. Link references must exist and be visible; command links require command
+events. Conditional document/contract parent requirements are described below.
 
 Example request file for `create`:
 
