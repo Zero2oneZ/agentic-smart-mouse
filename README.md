@@ -4,6 +4,16 @@
 
 A native Omarchy hotbox with persistent category chats, project briefs, folder links, and live shortcut search.
 
+A separate [Rust orchestration core](core/README.md) now provides a tested local
+foundation for mandatory segmented workflows, SQL checkpoints, bounded execution
+loops and delegated-permission rules. Its [implementation plan](core/docs/PLAN.md)
+defines the remaining service, isolation and PTC work. This core currently runs
+deterministic fixtures; it is not connected to the desktop app or a model provider.
+
+See the [project documentation index](docs/README.md) and the
+[Rust core reference](core/docs/README.md) for architecture, executable contracts,
+CLI examples, governance rules, recovery procedures and development guidance.
+
 The intended global gesture is to hold **Ctrl + Super** in either order for 0.3 seconds. The menu expands at the pointer; release either key to retract. Click a choice, right-click for deeper actions, or double-click the center for master chat.
 
 The global shortcut observes Ctrl and Super without consuming them. Left and right modifier keys are supported. Physical-keyboard activation remains unverified; use `hotbox open` and its **Preview hotbox** button as an alternative.
