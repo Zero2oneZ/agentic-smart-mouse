@@ -7,6 +7,10 @@ concrete proposed [placement system prompt](../templates/prompts/agent-placement
 The prompt is not wired into Qt or a provider. No swarm dispatcher, global catalog
 service, rank evaluator or runtime partition migration is implemented here.
 
+For the first build team, use the [planned role cards](PLANNED_SWARM_AGENTS.md)
+and [delivery gates](BUILD_ROADMAP.md). This catalog design remains broader than
+the first coding slice; prompts do not imply installed capabilities.
+
 ## Product model
 
 Every Hotbox **process-launching action** resolves through one orchestration entry

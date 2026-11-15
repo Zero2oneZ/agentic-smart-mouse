@@ -7,6 +7,8 @@ the fixed local notes recipe. General orchestration adapters remain separate.
 
 | Start here | Contents |
 | --- | --- |
+| [Build roadmap](BUILD_ROADMAP.md) | Ordered delivery stages, dependencies, runtime/data ownership and acceptance gates |
+| [Planned build swarm](PLANNED_SWARM_AGENTS.md) | Nine disabled/planned roles, capability boundaries, handoffs and parent-budget rules |
 | [Whole-product release review](../../docs/PRODUCT_REVIEW.md) | Consolidated user-facing priorities, clean UI, deterministic setup and supervised background work |
 | [Connected local tasks](LOCAL_TASKS.md) | Notes-to-brief UI, durable checkpoints, private results, controls and CLI operations |
 | [Core README](../README.md) | Scope, prerequisites, build commands and quick orientation |

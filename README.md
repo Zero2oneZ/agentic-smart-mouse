@@ -37,6 +37,16 @@ The intended global gesture is to hold **Ctrl + Super** in either order for 0.3 
 
 The global shortcut observes Ctrl and Super without consuming them. Left and right modifier keys are supported. Physical-keyboard activation remains unverified; use `hotbox open` and its **Preview hotbox** button as an alternative.
 
+## Next build and planned swarm
+
+The [build roadmap](core/docs/BUILD_ROADMAP.md) makes one real verified coding
+run the next product milestone, then connects bounded loop control, a small team
+and measured master-tree improvement. Each stage has prerequisites and acceptance
+evidence. The [planned agent roles](core/docs/PLANNED_SWARM_AGENTS.md) define nine
+specialties, but the first team is only a builder and independent verifier with
+ordinary code controlling preparation, accounting and dispatch. These are planned
+definitions, not newly launched workers or enabled swarm capabilities.
+
 ## Build and run
 
 `bin/build`, `bin/test`, then `build/hotbox open`. Install system-wide with `bin/install`, or use `bin/install-local` for a staged user-local update with database/binary backups and launcher installation; restart the resident app separately. `hotbox daemon` runs in the background; `hotbox open` opens Activity; `hotbox menu` previews the hotbox; `hotbox release` dismisses it; `hotbox keybindings` opens shortcut search; `hotbox quit` stops the resident app.

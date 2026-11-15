@@ -1,5 +1,9 @@
 # Standalone orchestration implementation plan
 
+The near-term [build roadmap](BUILD_ROADMAP.md) breaks this plan into gated delivery
+stages; [planned swarm roles](PLANNED_SWARM_AGENTS.md) define who can contribute
+without creating another controller.
+
 ## Primary concern: orchestration and measured improvement
 
 The orchestration loop and its optimization are foundational, not a feature added

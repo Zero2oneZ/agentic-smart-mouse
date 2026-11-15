@@ -1,5 +1,9 @@
 # Hotbox Agents category and mandatory agent-builder process
 
+The [build roadmap](BUILD_ROADMAP.md) and [planned build swarm](PLANNED_SWARM_AGENTS.md)
+define the first implementation slice. The current Agents run monitor is distinct
+from the general builder proposed here.
+
 ## Status and intended outcome
 
 **Plan only.** This change does not add a live menu entry, create agents or VMs,

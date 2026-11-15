@@ -5,6 +5,8 @@ bridge connects the local notes workflow; chat and orchestration use separate da
 
 | Documentation | Use it for |
 | --- | --- |
+| [Build roadmap](../core/docs/BUILD_ROADMAP.md) | Ordered delivery stages, dependencies, runtime/data ownership and acceptance gates |
+| [Planned build swarm](../core/docs/PLANNED_SWARM_AGENTS.md) | Nine disabled/planned roles, capability boundaries, handoffs and parent-budget rules |
 | [Whole-product review](PRODUCT_REVIEW.md) | First-release priorities, plain-language UI, deterministic setup, headless workers, naming and segmentation |
 | [Project README](../README.md) | Desktop installation, activation gesture, chats, model setup, Git, session segments and shared storage |
 | [Local task workflow](../core/docs/LOCAL_TASKS.md) | New task/Activity, checked private results, controls, recovery and CLI |
