@@ -1,4 +1,5 @@
 #include "backend.h"
+#include "providerreceipts.h"
 #include "gitworkspace.h"
 #include "sessionledger.h"
 #include "theme.h"
@@ -26,6 +27,58 @@
 class HotboxTests : public QObject {
     Q_OBJECT
   private slots:
+    void providerReceiptsNormalizeWithoutDoubleCounting() {
+        auto line=[](const QJsonObject &value){return QJsonDocument(value).toJson(QJsonDocument::Compact)+'\n';};
+        QJsonObject usage{{"input_tokens",10},{"output_tokens",2},{"cached_input_tokens",4},{"reasoning_output_tokens",1}};
+        QJsonObject codex{{"type","turn.completed"},{"usage",usage}};
+        auto result=ProviderReceipts::normalize("codex",line(codex),true);
+        QCOMPARE(result["status"].toString(),QString("known"));QCOMPARE(result["input_tokens"].toLongLong(),10LL);QCOMPARE(result["output_tokens"].toLongLong(),2LL);
+        QCOMPARE(ProviderReceipts::normalize("codex",line(codex),false)["status"].toString(),QString("partial"));
+        QCOMPARE(ProviderReceipts::normalize("codex",line(codex)+line(codex),true)["status"].toString(),QString("unknown"));
+        codex["id"]="terminal-1";result=ProviderReceipts::normalize("codex",line(codex)+line(codex),true);QCOMPARE(result["status"].toString(),QString("known"));QCOMPARE(result["duplicate_records"].toInt(),1);QCOMPARE(result["input_tokens"].toLongLong(),10LL);
+        auto conflicting=codex;conflicting["usage"]=QJsonObject{{"input_tokens",11},{"output_tokens",2}};
+        QCOMPARE(ProviderReceipts::normalize("codex",line(codex)+line(conflicting),true)["reason"].toString(),QString("ambiguous_terminal_records"));
+        for(auto value:QList<QJsonValue>{-1,1.5,1e13,QString("10"),QJsonValue()}){auto bad=usage;bad["input_tokens"]=value;auto event=codex;event["usage"]=bad;QCOMPARE(ProviderReceipts::normalize("codex",line(event),true)["status"].toString(),QString("unknown"));}
+        QCOMPARE(ProviderReceipts::normalize("codex","diagnostic text\n"+line(codex),true)["status"].toString(),QString("unknown"));
+        QCOMPARE(ProviderReceipts::normalize("codex",QByteArray(1048577,'x'),true)["reason"].toString(),QString("line_limit"));
+        QCOMPARE(ProviderReceipts::normalize("codex",QByteArray(8388609,'x'),true)["reason"].toString(),QString("source_limit"));
+        QJsonObject claude{{"type","result"},{"uuid","result-1"},{"is_error",false},{"usage",QJsonObject{{"input_tokens",10},{"output_tokens",2},{"cache_read_input_tokens",4},{"cache_creation_input_tokens",3}}}};
+        result=ProviderReceipts::normalize("claude",line(claude),true);QCOMPARE(result["status"].toString(),QString("known"));QCOMPARE(result["input_tokens"].toLongLong(),17LL);QCOMPARE(result["provider_input_tokens"].toLongLong(),10LL);
+        claude["is_error"]=true;QVERIFY(ProviderReceipts::normalize("claude",line(claude),true)["provider_failed"].toBool());
+        claude["usage"]=QJsonObject{{"input_tokens",10},{"output_tokens",2}};QCOMPARE(ProviderReceipts::normalize("claude",line(claude),true)["status"].toString(),QString("unknown"));
+        QCOMPARE(ProviderReceipts::normalize("codex",line(claude),true)["status"].toString(),QString("unknown"));
+    }
+    void providerReceiptsPersistAndBlockUnknownFollowups() {
+        QTemporaryDir dir;QDir().mkpath(dir.filePath("bin"));QFile fake(dir.filePath("bin/codex"));
+        auto script=[&](const QByteArray &output){if(!fake.open(QIODevice::WriteOnly|QIODevice::Truncate))return false;fake.write("#!/bin/sh\nprintf '%s\\n' \"$@\" > arguments.txt\ncat > received.txt\n"+output);fake.close();return fake.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner);};
+        QVERIFY(script("printf '%s\\n' '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":12,\"output_tokens\":3}}'\nprintf '%s\\n' '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":999,\"output_tokens\":999}}' >&2\n"));
+        auto old=qgetenv("PATH");auto restore=qScopeGuard([&]{qputenv("PATH",old);});qputenv("PATH",(dir.filePath("bin")+":/usr/bin").toUtf8());QString id,digest;
+        {
+            Backend b(dir.filePath("data"),nullptr,false);auto *agents=b.agents();id=agents->start("Receipt",{{"name","Receipt"},{"id",1}},"codex");QVERIFY(!id.isEmpty());QTRY_COMPARE_WITH_TIMEOUT(agents->selected()["state"].toString(),QString("finished"),5000);
+            auto receipt=b.agentReceipt(id);QVERIFY(receipt["ok"].toBool());QCOMPARE(receipt["usage"].toMap()["input_tokens"].toLongLong(),12LL);QCOMPARE(receipt["outcome"].toString(),QString("succeeded"));QCOMPARE(receipt["verification"].toString(),QString("unverified"));QVERIFY(receipt["cost"].isNull());digest=receipt["receipt_digest"].toString();QCOMPARE(digest.size(),64);
+            QFile args(agents->selected()["path"].toString()+"/arguments.txt");QVERIFY(args.open(QIODevice::ReadOnly));QVERIFY(args.readAll().contains("--json"));
+            QCOMPARE(b.optimizerReport()["reportedInputTokens"].toLongLong(),12LL);
+            auto other=b.addCategory("Outside","","",0);b.select(other);QVERIFY(!b.agentReceipt(id)["ok"].toBool());QVERIFY(b.contextTool("read_agent_receipt",{{"run",id}}).contains("error"));b.select(1);
+            QVERIFY(script("printf 'plain output\\n'\n"));auto unknown=agents->start("Unknown",{{"name","Unknown"},{"id",1}},"codex");QVERIFY(!unknown.isEmpty());QTRY_COMPARE(agents->selected()["state"].toString(),QString("finished"));QCOMPARE(b.agentReceipt(unknown)["usage"].toMap()["status"].toString(),QString("unknown"));QVERIFY(agents->start("Follow up",{},"codex",unknown).isEmpty());QVERIFY(agents->problem().contains("unknown or partial"));
+            QVERIFY(script("printf '%s\\n' '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":2,\"output_tokens\":1}}'\nexit 3\n"));auto failed=agents->start("Fail",{{"name","Fail"},{"id",1}},"codex");QVERIFY(!failed.isEmpty());QTRY_COMPARE(agents->selected()["state"].toString(),QString("attention"));QCOMPARE(b.agentReceipt(failed)["outcome"].toString(),QString("failed"));QCOMPARE(b.agentReceipt(failed)["exit_code"].toInt(),3);QCOMPARE(b.agentReceipt(failed)["usage"].toMap()["status"].toString(),QString("known"));
+        }
+        {
+            Backend b(dir.filePath("data"),nullptr,false);QCOMPARE(b.agentReceipt(id)["receipt_digest"].toString(),digest);
+        }
+        auto connection=QUuid::createUuid().toString();{auto db=QSqlDatabase::addDatabase("QSQLITE",connection);db.setDatabaseName(dir.filePath("data/hotbox.sqlite3"));QVERIFY(db.open());QSqlQuery q(db);QVERIFY(!q.exec("UPDATE provider_receipts SET document='{}'"));QVERIFY(!q.exec("DELETE FROM provider_receipts"));db.close();}QSqlDatabase::removeDatabase(connection);
+    }
+    void providerReceiptsRecoverCancelAndCaptureLimits() {
+        QTemporaryDir dir;QDir().mkpath(dir.filePath("bin"));QFile fake(dir.filePath("bin/codex"));
+        auto script=[&](const QByteArray &output){if(!fake.open(QIODevice::WriteOnly|QIODevice::Truncate))return false;fake.write("#!/bin/sh\ncat >/dev/null\n"+output);fake.close();return fake.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner);};
+        auto old=qgetenv("PATH");auto restore=qScopeGuard([&]{qputenv("PATH",old);});qputenv("PATH",(dir.filePath("bin")+":/usr/bin").toUtf8());
+        Backend b(dir.filePath("data"),nullptr,false);auto *agents=b.agents();auto target=QVariantMap{{"name","Limits"},{"id",1}};
+        QVERIFY(script("sleep 30\n"));auto cancelled=agents->start("Cancel",target,"codex");QVERIFY(!cancelled.isEmpty());agents->stop(cancelled);QTRY_VERIFY_WITH_TIMEOUT(!agents->receipt(cancelled).isEmpty(),5000);QCOMPARE(agents->receipt(cancelled)["outcome"].toString(),QString("cancelled"));QCOMPARE(agents->receipt(cancelled)["usage"].toMap()["status"].toString(),QString("unknown"));
+        auto timeout=agents->start("Timeout",target,"codex");QVERIFY(!timeout.isEmpty());QTRY_VERIFY_WITH_TIMEOUT(!agents->findChildren<QProcess*>().isEmpty(),1000);QProcess *running=nullptr;for(auto *p:agents->findChildren<QProcess*>())if(p->state()!=QProcess::NotRunning)running=p;QVERIFY(running);QTRY_COMPARE_WITH_TIMEOUT(running->state(),QProcess::Running,1000);QTRY_VERIFY_WITH_TIMEOUT(!running->findChildren<QTimer*>().isEmpty(),1000);running->findChildren<QTimer*>().first()->start(20);QTRY_VERIFY_WITH_TIMEOUT(!agents->receipt(timeout).isEmpty(),5000);QCOMPARE(agents->receipt(timeout)["outcome"].toString(),QString("timed_out"));
+        QVERIFY(script("python3 -c 'print(\"x\" * 9000000)'\n"));auto limited=agents->start("Output limit",target,"codex");QVERIFY(!limited.isEmpty());QTRY_VERIFY_WITH_TIMEOUT(!agents->receipt(limited).isEmpty(),10000);QCOMPARE(agents->receipt(limited)["outcome"].toString(),QString("output_limit"));QVERIFY(agents->receipt(limited)["usage"].toMap()["status"]!="known");QVERIFY(QFileInfo(agents->selected()["path"].toString()+"/run.log").size()<=8388608);
+        QString recovered="recovered-attempt";auto connection=QUuid::createUuid().toString();
+        {auto db=QSqlDatabase::addDatabase("QSQLITE",connection);db.setDatabaseName(dir.filePath("data/hotbox.sqlite3"));QVERIFY(db.open());QSqlQuery q(db);q.prepare("INSERT INTO agent_runs(id,title,provider,target,prompt,path,state,detail,created) VALUES(?,'Interrupted','codex','{\"id\":1}','old','/missing','running','old','old')");q.addBindValue(recovered);QVERIFY(q.exec());db.close();}QSqlDatabase::removeDatabase(connection);
+        {Backend restart(dir.filePath("data"),nullptr,true);auto receipt=restart.agentReceipt(recovered);QVERIFY(receipt["ok"].toBool());QCOMPARE(receipt["outcome"].toString(),QString("interrupted"));QCOMPARE(receipt["usage"].toMap()["status"].toString(),QString("unknown"));}
+    }
     void rollingLedgerMigratesVersionOneAndProtectsContracts() {
         QTemporaryDir dir;
         QString road;
@@ -1092,7 +1145,7 @@ feed->setProperty("followTail",false);b.send("Another update");QTest::qWait(30);
     void headlessAgentsPersistOutputAndStatus() {
         QTemporaryDir dir;QDir().mkpath(dir.filePath("bin"));
         QFile fake(dir.filePath("bin/codex"));QVERIFY(fake.open(QIODevice::WriteOnly));
-        fake.write("#!/bin/sh\ncat > received.txt\nprintf 'mock output\\n'\nsleep 0.1\n");fake.close();QVERIFY(fake.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner));
+        fake.write("#!/bin/sh\ncat > received.txt\nprintf '%s\\n' '{\"type\":\"item.completed\",\"item\":{\"text\":\"mock output\"}}' '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}'\nsleep 0.1\n");fake.close();QVERIFY(fake.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner));
         const auto oldPath=qgetenv("PATH");auto restore=qScopeGuard([&]{qputenv("PATH",oldPath);});qputenv("PATH",(dir.filePath("bin")+":/usr/bin").toUtf8());
         QString id;
         {

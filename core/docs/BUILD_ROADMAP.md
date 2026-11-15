@@ -19,7 +19,7 @@ As of this build checkpoint:
 - Implemented: local notes execution/recovery; private data/catalog separation;
   supervised CLI processes; saved run output; scoped chevron feed; pinned Qt loop
   policy, parent follow-up lineage and a read-only optimizer report.
-- Last verified: 34 offline Qt checks and the CLI workflow pass. Three TCP mock
+- Last verified: 37 offline Qt checks and the CLI workflow pass. Three TCP mock
   server checks are excluded. Provider behavior is tested with a fake provider.
 - Missing: Cargo for a fresh Rust build in this session, authenticated coding-run
   evidence, reliable live provider usage, independent general artifact acceptance,
@@ -100,6 +100,11 @@ bindings merely to make a test pass.
 Start with one authenticated provider adapter, then add the second against the
 same contract. Reuse the existing supervisor; move authority into the core bridge
 rather than building a parallel scheduler.
+
+The [implemented supervised receipt adapter](PROVIDER_RECEIPTS.md) now normalizes
+terminal CLI observations, private immutable receipts, provider cache semantics
+and unknown-usage stopping. It does not complete B1: authenticated provenance and
+general leased-runner receipt integration remain gates.
 
 A receipt must identify root run, plan/step/attempt, lease/fence, source revision,
 policy revision, environment, provider/model version, event sequence, output

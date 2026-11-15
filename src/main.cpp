@@ -1,4 +1,5 @@
 #include "backend.h"
+#include "providerreceipts.h"
 #include "gitworkspace.h"
 #include "theme.h"
 #include "translator.h"
@@ -59,7 +60,7 @@ int main(int argc, char **argv) {
     const bool headless = QStringList{"events",   "read-event", "attach", "record",     "focus",
                                       "snapshot", "branch",     "sync",   "git-config", "run"}
                               .contains(commandName) ||
-                          commandName == "build" || commandName == "optimize" || commandName == "doctor" || commandName == "segment" || commandName == "architecture";
+                          commandName == "provider-schema" || commandName == "agent-receipt" || commandName == "build" || commandName == "optimize" || commandName == "doctor" || commandName == "segment" || commandName == "architecture";
     if (check || smoke || headless) {
         qputenv("QT_QPA_PLATFORM", "offscreen");
         qputenv("QT_QPA_PLATFORMTHEME", "");
@@ -117,7 +118,9 @@ int main(int argc, char **argv) {
         }
         QJsonObject result;
         int exitCode = 0;
-        if(command=="build") {
+        if(command=="provider-schema") {result=QJsonObject::fromVariantMap(ProviderReceipts::catalog());result["ok"]=true;result["adapter_revision"]=ProviderReceipts::revision();}
+        else if(command=="agent-receipt")result=QJsonObject::fromVariantMap(backend.agentReceipt(option("--id")));
+        else if(command=="build") {
             QFile request(option("--request-file"));
             if(!request.open(QIODevice::ReadOnly)||request.size()>128000){QTextStream(stderr)<<"Build requests require --request-file with a JSON object under 128 KB\n";return 2;}
             QJsonParseError parse;auto body=QJsonDocument::fromJson(request.readAll(),&parse);

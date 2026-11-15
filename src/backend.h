@@ -51,6 +51,7 @@ class Backend : public QObject {
     ~Backend() override;
     Q_INVOKABLE QVariantList activityPage(qint64 before=0) const;
     Q_INVOKABLE QVariantMap activityDetail(qint64 id,int offset=0) const;
+    Q_INVOKABLE QVariantMap agentReceipt(const QString &id, int scope = 0) const;
     Q_INVOKABLE QVariantMap buildAction(const QString &operation,const QVariantMap &arguments);
     Q_INVOKABLE QVariantMap runtimeReport() const;
     Q_INVOKABLE QVariantMap optimizerReport(int scope=0) const;

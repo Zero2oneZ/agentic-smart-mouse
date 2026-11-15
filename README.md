@@ -49,6 +49,13 @@ definitions, not newly launched workers or enabled swarm capabilities.
 
 The [contract audit](docs/CONTRACT_AUDIT.md) maps implemented behavior, partial integrations and planned work to source and verification references. Build/CLI checks now reject drift between the canonical build API, generated reference and compiled catalog.
 
+The [latest build pass](docs/BUILD_PASS_2026-11-15.md) records the roadmap gates and concrete blockers.
+
+The [provider receipt adapter](core/docs/PROVIDER_RECEIPTS.md) now saves immutable,
+scoped process/usage observations with provider-specific accounting. Unknown or
+partial usage blocks automatic family follow-up; process success remains separate
+from verified functionality.
+
 ## Build roadmap and evidence
 
 The **Build roadmap** sidebar now stores milestones, steps, substeps, issues and
@@ -73,7 +80,7 @@ The development machine uses a user-local install: executable in `~/.local/bin/h
 
 ## Verification
 
-Thirty-seven Qt Test checks cover the application. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, context-tool round trips, architecture registration, shared-library reuse, and preservation of user files. Offscreen screenshots use sample content. The live overlay rendered successfully; the previous Tab + Q shortcut failed verification. The replacement Ctrl + Super bindings passed Lua callback checks and loaded in Hyprland without configuration errors; they still require a physical-keyboard check. The Super + numpad + binding is loaded without configuration errors. Numpad focus, NumLock aliases, recording recovery and browser import filtering pass offscreen tests; five browser-companion tests and the Lua keypad callback check pass. The companion has not been tested in a live browser. Keep desktop keyboard injection out of further automated checks.
+Forty Qt Test checks cover the application. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, context-tool round trips, architecture registration, shared-library reuse, and preservation of user files. Offscreen screenshots use sample content. The live overlay rendered successfully; the previous Tab + Q shortcut failed verification. The replacement Ctrl + Super bindings passed Lua callback checks and loaded in Hyprland without configuration errors; they still require a physical-keyboard check. The Super + numpad + binding is loaded without configuration errors. Numpad focus, NumLock aliases, recording recovery and browser import filtering pass offscreen tests; five browser-companion tests and the Lua keypad callback check pass. The companion has not been tested in a live browser. Keep desktop keyboard injection out of further automated checks.
 
 ## Model connection
 

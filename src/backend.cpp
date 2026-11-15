@@ -884,6 +884,7 @@ QJsonArray Backend::toolDefinitions() const {
     };
     QJsonObject integer{{"type", "integer"}}, text{{"type", "string"}};
     return {
+        make("read_agent_receipt","Read scoped immutable provider/process usage evidence. Does not certify functionality or billing.",{{"run",text}},{"run"}),
         make("read_build_contract","Read a scoped immutable acceptance contract version. Read-only reference data.",{{"roadmap",text},{"contract",text}},{"roadmap","contract"}),
         make("read_build_guidance","Read bounded rolling-ledger reference context: proposals, contracts, blockers and unverified check evidence. Does not grant dispatch or acceptance.",{{"roadmap",text},{"node",text}},{"roadmap"}),
         make("read_build_roadmap","Read scoped build roadmap metadata and evidence references. Read-only; no execution transitions.",{{"roadmap",text}},{"roadmap"}),
@@ -929,6 +930,7 @@ QJsonArray Backend::toolDefinitions() const {
 QVariantMap Backend::contextTool(const QString &name, const QVariantMap &a, int scope) {
     if (scope == 0)
         scope = m_current;
+    if(name=="read_agent_receipt")return agentReceipt(a.value("run").toString(),scope);
     if(name=="read_build_contract")return m_build->call(scope,"contract.read",{{"schema_version",1},{"roadmap",a.value("roadmap")},{"contract",a.value("contract")}});
     if(name=="read_build_guidance")return m_build->call(scope,"guide",{{"schema_version",1},{"roadmap",a.value("roadmap")},{"node",a.value("node",QString(""))}});
     if(name=="read_build_roadmap"){
@@ -1208,4 +1210,13 @@ QVariantMap Backend::buildAction(const QString &operation,const QVariantMap &arg
     auto result=m_build->call(m_current,operation,arguments);
     if(result.value("ok").toBool()&&!BuildLedger::isRead(operation)){emit activityChanged();emit changed();}
     return result;
+}
+
+QVariantMap Backend::agentReceipt(const QString &id,int scope) const {
+    if(scope==0)scope=m_current;
+    QSqlQuery q(m_db);q.prepare("SELECT target FROM agent_runs WHERE id=?");q.addBindValue(id);
+    if(!q.exec()||!q.next()||!m_ledger->contains(scope,QJsonDocument::fromJson(q.value(0).toByteArray()).object().value("id").toInt()))return {{"error","Agent receipt is outside this workspace"},{"ok",false}};
+    auto result=m_agents->receipt(id);
+    if(result.isEmpty())return {{"ok",false},{"error","No durable receipt is available for this run"}};
+    result["ok"]=true;return result;
 }

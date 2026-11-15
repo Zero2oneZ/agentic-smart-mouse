@@ -37,3 +37,6 @@ SOURCES += ../src/loopoptimizer.cpp
 
 HEADERS += ../src/buildledger.h
 SOURCES += ../src/buildledger.cpp
+
+HEADERS += ../src/providerreceipts.h
+SOURCES += ../src/providerreceipts.cpp

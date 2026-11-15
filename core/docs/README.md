@@ -11,6 +11,7 @@ general leased agent dispatch or independent acceptance.
 | Start here | Contents |
 | --- | --- |
 | [Contract audit](../../docs/CONTRACT_AUDIT.md) | Implemented/partial/planned capability map, direct references, findings and change workflow |
+| [Provider receipts](PROVIDER_RECEIPTS.md) | Normalized immutable observations, cache accounting, scoped reads and unknown-usage stopping |
 | [Generated build API](BUILD_LEDGER_REFERENCE.md) | Shared catalog operations, fields, enums and checked source/test references |
 | [Build ledger API](BUILD_LEDGER_API.md) | Implemented SQL roadmap, versioned documents, scoped evidence and checkpoint/subtree forks |
 | [Build roadmap](BUILD_ROADMAP.md) | Ordered delivery stages, dependencies, runtime/data ownership and acceptance gates |

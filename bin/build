@@ -10,6 +10,7 @@ for tool in python3 qmake6 make g++; do
     command -v "$tool" >/dev/null 2>&1 || { echo "Missing build tool: $tool" >&2; exit 1; }
 done
 "$ROOT/bin/check-contracts"
+"$ROOT/bin/check-provider-contracts"
 mkdir -p "$ROOT/build"
 if [ "$mode" = "--desktop-only" ]; then
     test -x "$ROOT/build/hotbox-core" || { echo "Desktop-only mode requires build/hotbox-core from an earlier full build." >&2; exit 1; }

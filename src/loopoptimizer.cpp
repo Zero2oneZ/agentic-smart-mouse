@@ -12,8 +12,8 @@ QVariantMap Backend::optimizerReport(int scope) const {
     auto policy = QJsonDocument::fromJson(policyFile.readAll()).object();
     QSqlQuery q(m_db);
     q.exec(
-        "SELECT a.state,a.prompt,m.root_run,m.usage_known,m.input_tokens,m.output_tokens,m.policy_revision "
-        "FROM agent_runs a LEFT JOIN loop_metrics m ON m.run=a.id ORDER BY a.rowid DESC LIMIT 1000");
+        "SELECT a.state,a.prompt,m.root_run,m.usage_known,m.input_tokens,m.output_tokens,m.policy_revision,r.run "
+        "FROM agent_runs a LEFT JOIN loop_metrics m ON m.run=a.id LEFT JOIN provider_receipts r ON r.run=a.id ORDER BY a.rowid DESC LIMIT 1000");
     int runs = 0, unknown = 0, attention = 0, active = 0;
     qint64 input = 0, output = 0;
     QSet<QString> roots, prompts;
@@ -26,7 +26,7 @@ QVariantMap Backend::optimizerReport(int scope) const {
             ++active;
         if (!q.value(2).toString().isEmpty())
             roots.insert(q.value(2).toString());
-        if (q.value(3).toBool()) {
+        if (q.value(3).toBool()&&!q.value(7).isNull()) {
             input += q.value(4).toLongLong();
             output += q.value(5).toLongLong();
         } else
@@ -71,7 +71,7 @@ QVariantMap Backend::optimizerReport(int scope) const {
             {"parentRuns", roots.size()},
             {"active", active},
             {"attention", attention},
-            {"usageUnknown", unknown},
+            {"usageUnknown", unknown}, {"usageEvidence","normalized_receipts_only"},
             {"reportedInputTokens", input},
             {"reportedOutputTokens", output},
             {"contextSnapshots", context.value(0)},

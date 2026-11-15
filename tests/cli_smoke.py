@@ -114,9 +114,13 @@ with tempfile.TemporaryDirectory(prefix="hotbox-cli-") as temp:
     failed=call('run','--category',category,'--build',roadmap,'--step',step['node'],'--',sys.executable,'-c','import sys; sys.exit(3)',expected=3)
     assert failed['buildIssueRecorded']
     assert any(node['id']==failed['buildIssue'] and node['kind']=='issue' for node in build('read',{'roadmap':roadmap})['nodes'])
+    provider=call("provider-schema")
+    assert provider['contract_id']=='hotbox.provider-receipt.v1'
+    assert len(provider['adapter_revision'])==64
+    call('agent-receipt','--id','missing-run',expected=1)
     loop=call("optimize")
     assert loop["mode"]=="advisory_only" and loop["runs"]==0
-    assert loop["policy"]["id"]=="master-loop-v1"
+    assert loop["policy"]["id"]=="master-loop-v2"
     call("optimize","--category",library_workspace,expected=1)
     health=call("doctor")
     assert health["ok"] and health["databaseOk"] and health["coreAvailable"]
