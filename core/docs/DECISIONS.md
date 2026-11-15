@@ -11,7 +11,7 @@ boundaries and [Plan](PLAN.md) for delivery order.
 | D03 | Every build uses versioned templates and mandatory segmented stages | Implemented for the fixture workflow; architecture/policy pinning and approvals remain to add |
 | D04 | SQL owns durable state | Implemented with private SQLite; no production server database is selected |
 | D05 | Tool/source trees and user belongings have separate ownership and lifecycle | Existing app implements local registry/provisioning; OS sandbox enforcement remains to add |
-| D06 | Git/version ancestry and data permissions are separate | Accepted; local permission lineage exists, tool/version registry remains to add |
+| D06 | Git/version ancestry and data permissions are separate | Implemented as separate local permission and immutable tool-version registries; real Git fork/copy remains to add |
 | D07 | Delegation can only retain or narrow upstream authority | Implemented locally for the fixture action vocabulary |
 | D08 | Independent grants survive revocation of a different lineage | Implemented; there is no implicit switch of a run's pinned grant |
 | D09 | Sharing carries architecture/provenance without silently exporting private state | Accepted; export/share packaging remains to add |
@@ -78,3 +78,14 @@ backend differences; simulations are not isolation and weaker backend fallback i
 forbidden. The external observer, quarantine processor and trusted admission
 controller have separate identities and roles. Only a scoped receipt-based promotion
 operation crosses into trusted datasets. See [Environments](ENVIRONMENTS.md).
+
+
+## First-release product constraints
+
+Follow the [whole-product review](../../docs/PRODUCT_REVIEW.md): task-first UI,
+deterministic setup/execution where possible, supervised headless work, readable
+names with IDs in details, scoped evidence segmentation and personal outcomes.
+Templates resolve mandatory authoring fields; normal users should not edit JSON,
+copy internal IDs or manage a terminal herd. Ship one complete local slice before
+expanding the catalog or runtime backends. These are delivery requirements, not
+claims that the current prototype implements the planned worker service.

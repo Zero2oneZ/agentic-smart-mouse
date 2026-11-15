@@ -4,6 +4,13 @@
 
 A native Omarchy hotbox with persistent category chats, project briefs, folder links, and live shortcut search.
 
+The [whole-product review](docs/PRODUCT_REVIEW.md) sets the next release priorities:
+a clean task-first interface, guided setup, deterministic execution, supervised
+headless work, readable names and automatic scoped evidence segmentation. It
+separates implemented behavior from the broader architecture plans. The running
+app remains a prototype; Agents, swarm planning and sandbox runners are not yet
+connected to it.
+
 A separate [Rust orchestration core](core/README.md) now provides a tested local
 foundation for mandatory segmented workflows, SQL checkpoints, bounded execution
 loops and delegated-permission rules. Its [implementation plan](core/docs/PLAN.md)
@@ -299,3 +306,16 @@ escalate, finish or stop decisions. A deterministic controller owns authority,
 state and budgets; independent checks own acceptance. Plans and task outcomes stay
 in personal environments, while reusable prompts/recipes remain in the global
 catalog. This is a specification/template increment, not an activated planner.
+
+
+## Whole-product audit checkpoint
+
+The current audit passed the build, 21 offscreen Qt checks, the headless desktop
+CLI workflow, 36 Rust integration tests, three packaging tests and the core CLI
+fixture. Desktop checks need local mock-server socket access and a writable private
+runtime directory. These checks do not establish novice usability, headless worker
+supervision or production isolation. The overlay footer now shows Ctrl + Super,
+matching the current activation gesture; existing screenshots may show older text.
+See the [product review](docs/PRODUCT_REVIEW.md) for ranked gaps, recommended features,
+plain-language vocabulary and release acceptance gates. No installed app or desktop
+configuration is changed by this source/documentation checkpoint.

@@ -1,5 +1,15 @@
 # Standalone orchestration implementation plan
 
+## First-release product sequence
+
+The [whole-product review](../../docs/PRODUCT_REVIEW.md) consolidates the product
+release order: clean UI/readiness, one deterministic end-to-end local job, one real
+supervised runner, smart evidence/model composition, then schedules/sharing/remote
+workers. Detailed increments below remain reference contracts; they do not require
+exposing technical fields or completing every future backend before the first
+usable slice. Pass the review's failure/recovery and novice-usability gates before
+claiming everyday readiness.
+
 ## Contract
 
 Keep the core in Rust. SQL is the durable source of state. Every build is segmented

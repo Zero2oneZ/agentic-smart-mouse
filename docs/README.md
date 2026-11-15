@@ -5,6 +5,7 @@ orchestration foundation. They have different runtime responsibilities and datab
 
 | Documentation | Use it for |
 | --- | --- |
+| [Whole-product review](PRODUCT_REVIEW.md) | First-release priorities, plain-language UI, deterministic setup, headless workers, naming and segmentation |
 | [Project README](../README.md) | Desktop installation, activation gesture, chats, model setup, Git, session segments and shared storage |
 | [Rust core README](../core/README.md) | Standalone deterministic kernel scope and quick start |
 | [Rust documentation index](../core/docs/README.md) | Architecture, contracts, all CLI commands, governance, operations and developer references |

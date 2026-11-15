@@ -80,6 +80,15 @@ shows its actual eligibility. Agent display names can change without moving file
 or changing IDs. Dragging an item changes categorization, not ownership or grants.
 Folders are navigation; My agents/Shared with me are permission-filtered views.
 
+## Everyday presentation
+
+Apply the [whole-product review](../../docs/PRODUCT_REVIEW.md): templates resolve the
+mandatory requirements behind four normal questions—what should it do, what may it
+use, where should results go, and when should it run. Advanced reveals the full
+contract/evidence checklist. Do not force users through twelve infrastructure forms,
+enter IDs or edit JSON to create a normal helper. Keep names and lifecycle/access
+choices distinct; a readable screen does not weaken enforcement.
+
 ## Mandatory builder requirements
 
 Each requirement has `unresolved`, `declared`, `verified`, `not_applicable` or

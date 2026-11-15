@@ -7,6 +7,7 @@ the Rust kernel remain separate programs and use separate databases.
 
 | Start here | Contents |
 | --- | --- |
+| [Whole-product release review](../../docs/PRODUCT_REVIEW.md) | Consolidated user-facing priorities, clean UI, deterministic setup and supervised background work |
 | [Core README](../README.md) | Scope, prerequisites, build commands and quick orientation |
 | [Architecture](ARCHITECTURE.md) | Current components, data ownership, graphs, context routing and target integrations |
 | [System model and catalog](SYSTEM_MODEL.md) | Default categories, IDs, connectivity, agents/harnesses, logs and future ingestion/data engineering |

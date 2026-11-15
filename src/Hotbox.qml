@@ -81,7 +81,7 @@ Window {
   }
   Rectangle {
    visible:overlay.currentParent===0;x:Math.max(8,Math.min(parent.width-width-8,menuRoot.cx-width/2));y:Math.max(8,Math.min(parent.height-height-8,menuRoot.cy+menuRoot.radiusY+58));width:270;height:30;radius:theme.radius;color:"#dd11151c";opacity:overlay.spread
-   Label {anchors.centerIn:parent;text:qsTr("TAB + Q  ·  release to retract");color:"#b8c0ce";font.pixelSize:11}
+   Label {anchors.centerIn:parent;text:qsTr("Ctrl + Super  ·  release to close");color:"#b8c0ce";font.pixelSize:11}
   }
  }
  Rectangle {
