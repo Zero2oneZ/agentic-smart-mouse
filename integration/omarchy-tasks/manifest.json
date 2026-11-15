@@ -1,0 +1,1 @@
+{"schemaVersion":1,"id":"tom.hotbox-tasks","name":"Hotbox tasks","version":"0.1.0","author":"Tom","license":"MIT","description":"A top task strip for local headless Hotbox agents; hidden when there are no unreviewed jobs.","kinds":["service"],"entryPoints":{"service":"Service.qml"}}
