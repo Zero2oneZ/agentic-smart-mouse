@@ -123,3 +123,14 @@ execution, independent verification, revocation delivery and a documented threat
 model. Test cross-user disclosure and cross-resource escalation alongside the
 existing lineage tests. This list is a delivery boundary for this feature, not a
 claim that the current local kernel supplies those controls.
+
+
+## Environment planning boundary
+
+Backpack abilities describe requests, not effective permissions or new kernel grant
+actions. Environment validation checks declarative trust-zone/storage/network rules;
+all plans return `launchable: false`. Reference strings and SHA-256 syntax checks
+do not verify identities, actual artifact bytes, mount aliases, isolation or signed
+admission receipts. No runner consumes these manifests yet. See
+[Environments](ENVIRONMENTS.md) for the intended observer/quarantine/admission split,
+backend attestation, scope resolution and fail-closed execution requirements.

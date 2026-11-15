@@ -377,3 +377,12 @@ reference-aware garbage collection; archiving a tool never deletes user belongin
 This list is an implementation contract and acceptance sequence. It does not claim
 that folders, schemas or fixture completion provide a production sandbox or a live
 agent/data platform.
+
+
+## Environment contract follow-up
+
+The [environment/backpack increment](ENVIRONMENTS.md) implements read-only typed
+plans for distinct backends and local/cloud placement. It specifies the paired
+boundary between ingress observers and internal ingestion. Entity persistence,
+actual runners and admission remain future work; existing catalog-v1 definitions
+and Qt media bindings are not repointed by these examples.

@@ -87,6 +87,22 @@ fn bounded_read(reader: impl Read) -> Result<Vec<u8>> {
 }
 fn execute() -> Result<Value> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.len() == 2 && args[0] == "backpack-example" {
+        let backpack = hotbox_core::Backpack::example(&args[1])?;
+        return Ok(
+            json!({"backpack_hash":backpack.hash()?,"backpack":backpack,"example_only":true}),
+        );
+    }
+    if args.len() == 2 && args[0] == "validate-backpack" {
+        let backpack: hotbox_core::Backpack =
+            serde_json::from_slice(&bounded_read(std::fs::File::open(&args[1])?)?)?;
+        return Ok(json!({"backpack_id":backpack.id,"backpack_hash":backpack.hash()?}));
+    }
+    if args.len() == 2 && args[0] == "plan-environment" {
+        let request: hotbox_core::EnvironmentRequest =
+            serde_json::from_slice(&bounded_read(std::fs::File::open(&args[1])?)?)?;
+        return Ok(serde_json::to_value(request.plan()?)?);
+    }
     if args.as_slice() == ["catalog"] {
         let catalog = hotbox_core::SystemCatalog::bundled()?;
         return Ok(json!({"catalog_hash":catalog.hash()?, "catalog":catalog}));
@@ -105,7 +121,7 @@ fn execute() -> Result<Value> {
     }
     if args.len() != 1 {
         return Err(hotbox_core::Error::Invalid(
-            "usage: hotbox-core DATABASE < request.json | hotbox-core validate TEMPLATE.json | hotbox-core catalog | hotbox-core validate-catalog CATALOG.json"
+            "usage: hotbox-core DATABASE < request.json | hotbox-core validate TEMPLATE.json | hotbox-core catalog | hotbox-core validate-catalog CATALOG.json | hotbox-core backpack-example NAME | hotbox-core validate-backpack FILE | hotbox-core plan-environment FILE"
                 .into(),
         ));
     }

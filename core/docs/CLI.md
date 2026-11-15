@@ -368,3 +368,39 @@ scope-root resolution, migration boundaries and the proposed entity contracts.
 
 These commands never open SQLite, create category folders, resolve symlinks on disk,
 start agents/monitors, capture terminals or register the catalog in the running app.
+
+
+## Backpacks and environment plans (no database)
+
+```sh
+hotbox-core backpack-example simulation
+hotbox-core backpack-example ingress
+hotbox-core backpack-example quarantine
+hotbox-core backpack-example trusted
+hotbox-core validate-backpack core/templates/backpacks/quarantine-v1.json
+hotbox-core plan-environment core/templates/environments/simulation-local-v1.json
+```
+
+`backpack-example NAME` returns `backpack`, `backpack_hash` and `example_only: true`.
+The examples' all-zero digests are placeholders, not verified artifacts.
+`validate-backpack FILE` reads a bare backpack document (not the example response
+wrapper) and returns `backpack_id` and `backpack_hash` after validation.
+
+`plan-environment FILE` reads an object containing `schema_version: 1`, `instance_id`,
+`scope_ref`, `target` (`local`/`cloud`), `platform` (`os: linux` and
+`architecture: amd64`/`arm64`), `backend` (`simulation`/`bubblewrap`/`oci`/`microvm`)
+and a complete embedded `backpack` object. It returns request/backpack hashes,
+instance/scope/target/platform/backend, isolation requirement, `launchable: false`
+and an explicit list of checks still required. Plans allocate no instance and are
+not approval tokens or OS capability attestations.
+
+The [complete contract and walkthrough](ENVIRONMENTS.md) define role/zone rules,
+artifact keys and backend differences. Unknown fields, unsupported versions/backends,
+invalid budgets, raw paths/URLs in references and forbidden trust-zone combinations
+are rejected. The CLI reads at most 256 KiB per input file. These commands perform
+no network, SQL, mount, process or filesystem-provisioning operations.
+
+For image packaging, use `python3 core/scripts/package_image.py --help`.
+`--dry-run` prints build arguments without contacting a daemon. Building requires
+actual reviewed pinned base references, a compatible engine and network/cache access.
+The helper never pushes or starts the image.

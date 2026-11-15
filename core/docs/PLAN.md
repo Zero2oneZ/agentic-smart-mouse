@@ -151,3 +151,20 @@ reviewed plans, operation/session/event contracts and a deterministic local-file
 ingestion fixture. Authentication and network policy must precede live monitors;
 verified isolated execution must precede real release activation. Preserve the
 mandatory workflow stages and the existing Qt media layout during these additions.
+
+
+## Environment/backpack contract slice — implemented planning only
+
+[Portable environments](ENVIRONMENTS.md) now specifies the reusable capability
+backpack, distinct backend isolation requirements, local/cloud placement and a
+paired ingress/quarantine/admission boundary. Read-only validation/planning commands
+and source-only CLI image packaging inputs exist. Plans remain nonlaunchable;
+example artifact hashes are placeholders and the image build is unverified.
+
+Persist backpack/environment/boundary/receipt identities through a new catalog and
+entity-registry revision. Finish reviewed plans and authenticated scope resolution,
+then test a deterministic local-file boundary and crash-safe publication before
+adding real sandbox/network workers. A cloud backend must attest required controls
+and refuse unsupported features rather than silently weakening isolation. Retain
+the same operation protocol with destination-local secrets and bindings. No shared
+multi-host SQLite file or implicit export of user belongings is part of this plan.

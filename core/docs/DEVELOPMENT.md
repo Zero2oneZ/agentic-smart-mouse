@@ -6,6 +6,7 @@
 | --- | --- |
 | [Cargo.toml](../Cargo.toml) and [Cargo.lock](../Cargo.lock) | Package, dependency and compiler requirements |
 | [lib.rs](../src/lib.rs) | Public exports and typed errors |
+| [environment.rs](../src/environment.rs) | Typed backpack requirements and read-only portable environment plans |
 | [catalog.rs](../src/catalog.rs) | Typed system catalog, structural validation and hashing |
 | [lineage.rs](../src/lineage.rs) | Immutable tool versions, selected development contexts and fork metadata |
 | [model.rs](../src/model.rs) | Templates, graph validation, input/output types and fixture evidence |
@@ -44,7 +45,7 @@ replay, deadline and fixture boundaries.
 
 ## Current test coverage
 
-The existing suite has 29 library integration tests (24 kernel tests and five catalog tests). This table names the tests so
+The existing suite has 36 library integration tests (24 kernel, five catalog and seven environment tests). This table names the tests so
 behavior can be traced directly to executable checks.
 
 | Test | Behavior covered |
@@ -140,3 +141,11 @@ unreachable states, states with no terminal path, unsupported contracts and dige
 pinning. CLI checks validate a catalog round trip, reject a malicious path and
 confirm no database was created. Runtime graphs and filesystem provisioning are
 outside these tests because the catalog has no such adapters.
+
+Environment tests cover local/cloud hashes, always-nonlaunchable plans, trust-zone
+mount and network restrictions, reference-only inputs, pinned backend requirements,
+simulation separation and bounded contracts. Three Python packaging tests use dry
+runs to reject mutable/injected base references and invalid engine/tag inputs and
+check the narrow build context. CLI fixtures validate backpacks, plan environments,
+reject trust crossings and confirm no database side effects. Run them all with
+`core/scripts/check`; no container daemon is needed for this suite.

@@ -23,6 +23,7 @@ flowchart LR
 
 | Module | Responsibility | Does not do |
 | --- | --- | --- |
+| `environment.rs` | Portable backpack contracts, trust-zone validation and nonlaunchable environment plans | Start sandboxes or authorize data promotion |
 | `catalog.rs` | Read-only default catalog, structural validation and digest pinning | Provision storage or persist a live entity graph |
 | `lineage.rs` | Immutable tool versions, development context and fork metadata | Copy Git repositories or create chats |
 | `model.rs` | Typed contracts, template validation, hashing, fixture evidence and public views | Read project files or execute build commands |
@@ -143,3 +144,13 @@ and edge registry remains a target. The model separates containment, execution,
 provenance, permission and network relationships and specifies scoped logs and
 future web monitoring, ingestion and data engineering adapters. Read-only catalog
 commands never alter live folders, bindings, policies or the Qt application.
+
+
+## Portable environment layer
+
+The [environment contract](ENVIRONMENTS.md) models reusable backpacks and explicit
+local/cloud placements over simulation, bubblewrap, OCI and microVM backend types.
+Plan validation is implemented independently of SQL or Qt. All plans explicitly
+remain nonlaunchable; actual backend isolation, resolved identities/storage,
+network brokerage and paired-boundary admission are separate future components.
+An OCI CLI packaging recipe is included but has not been image-built here.

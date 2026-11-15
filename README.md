@@ -202,7 +202,8 @@ runtime bindings and the original tool unchanged. This is a local registry, not 
 Git copy operation or a connected Edit/Fork UI. Reviewed plans and contribution
 agreements remain future work. See [core CLI](core/docs/CLI.md#tool-lineage-registry).
 
-The core check suite covers 29 integration tests plus the multi-process CLI fixture.
+The core check suite covers 36 Rust integration tests, three packaging admission tests
+and the multi-process CLI fixture.
 It runs independently of the installed Qt application. Kernel schema 1 upgrades
 transactionally to schema 2; back up the separate kernel database before opening it
 with this version. The Qt chat database is never migrated by the core.
@@ -230,3 +231,31 @@ code/network/terminal logs, concise decision records, source-to-dataset provenan
 and distinct branch/fork/clone/instance behavior. Entity graph storage, generated
 IDs, agent execution, collectors and live data pipelines are planned adapters, not
 implemented services. Existing media paths and runtime bindings are unchanged.
+
+
+## Portable environments and capability backpacks
+
+The [environment contract](core/docs/ENVIRONMENTS.md) adds local/cloud planning for
+simulation, bubblewrap, OCI and microVM backends. Versioned backpacks describe
+requested abilities, pinned artifact references, scoped storage roles, endpoint
+references and CPU/memory/process/time/scratch/output budgets. They carry no live
+grants, credentials or user data. Four examples cover simulation, ingress,
+quarantine and trusted processing.
+
+The planned ingestion boundary separates an outside observer from an offline
+quarantine processor and an independent admission controller. Only admitted output
+can become a trusted dataset version. CLI validation rejects invalid role/network
+combinations; it does not enforce OS isolation or perform admission.
+
+```sh
+core/target/release/hotbox-core backpack-example quarantine
+core/target/release/hotbox-core validate-backpack core/templates/backpacks/quarantine-v1.json
+core/target/release/hotbox-core plan-environment core/templates/environments/simulation-local-v1.json
+```
+
+All plans are read-only and return `launchable: false`: runner, identity, storage,
+artifact verification and enforcement are unresolved. Example digests are placeholders.
+The CLI also has a [container build recipe](core/Containerfile) and a helper that
+requires reviewed digest-pinned base images. Packaging never pushes or launches an
+image. Image building is unverified here because Docker daemon access is denied;
+local Rust tests and CLI planning work independently.

@@ -10,6 +10,7 @@ the Rust kernel remain separate programs and use separate databases.
 | [Core README](../README.md) | Scope, prerequisites, build commands and quick orientation |
 | [Architecture](ARCHITECTURE.md) | Current components, data ownership, graphs, context routing and target integrations |
 | [System model and catalog](SYSTEM_MODEL.md) | Default categories, IDs, connectivity, agents/harnesses, logs and future ingestion/data engineering |
+| [Portable environments](ENVIRONMENTS.md) | Local/cloud plans, capability backpacks, distinct sandbox backends and the ingestion boundary |
 | [Contracts](CONTRACTS.md) | Template validation, limits, state transitions, leases, hashes and retry behavior |
 | [CLI reference](CLI.md) | Every command, request and response shape, plus an executable walkthrough |
 | [Security and governance](SECURITY.md) | Delegation rules, revocation, trust boundaries and sharing requirements |

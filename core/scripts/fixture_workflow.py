@@ -38,6 +38,32 @@ with tempfile.TemporaryDirectory(prefix="hotbox-core-cli-") as temporary:
                               capture_output=True, timeout=15, check=False)
     assert rejected.returncode != 0 and json.loads(rejected.stdout)["ok"] is False
     assert not Path(database).exists(), "Catalog commands must not create a database"
+    example = subprocess.run([binary, "backpack-example", "quarantine"], text=True,
+                             capture_output=True, timeout=15, check=True)
+    example = json.loads(example.stdout)["result"]
+    assert example["example_only"] is True
+    backpack_file = Path(temporary) / "backpack.json"
+    backpack_file.write_text(json.dumps(example["backpack"]))
+    checked = subprocess.run([binary, "validate-backpack", str(backpack_file)], text=True,
+                             capture_output=True, timeout=15, check=True)
+    assert json.loads(checked.stdout)["result"]["backpack_hash"] == example["backpack_hash"]
+    environment_file = Path(temporary) / "environment.json"
+    environment = {"schema_version": 1, "instance_id": "example-instance", "scope_ref": "project",
+                   "target": "cloud", "platform": {"os": "linux", "architecture": "amd64"},
+                   "backend": "bubblewrap", "backpack": example["backpack"]}
+    environment_file.write_text(json.dumps(environment))
+    planned = subprocess.run([binary, "plan-environment", str(environment_file)], text=True,
+                             capture_output=True, timeout=15, check=True)
+    planned = json.loads(planned.stdout)["result"]
+    assert planned["launchable"] is False and "runner_not_implemented" in planned["required_checks"]
+    assert planned["backpack_hash"] == example["backpack_hash"]
+    environment["backpack"]["storage"].append({"binding_ref": "escape", "role": "trusted_write"})
+    environment_file.write_text(json.dumps(environment))
+    rejected = subprocess.run([binary, "plan-environment", str(environment_file)], text=True,
+                              capture_output=True, timeout=15, check=False)
+    assert rejected.returncode != 0 and json.loads(rejected.stdout)["ok"] is False
+    assert not Path(database).exists(), "Environment planning must not create a database"
+
 
     validated = subprocess.run([binary, "validate", template_path], text=True, capture_output=True, check=True)
     assert json.loads(validated.stdout)["ok"]
@@ -102,4 +128,4 @@ with tempfile.TemporaryDirectory(prefix="hotbox-core-cli-") as temporary:
     assert fork["forked_from"] == {"tool_id": "player", "version": "1.0.0"}
     call("tool_context", actor="alice", grant_id="alice-root", tool_id="player-fork", version="1.0.0", succeeds=False)
 
-print("CLI fixture passed: segmented build, restart/resume, immutable template, audit events, delegated revocation, independent access, immutable tool versions, fork lineage and catalog validation.")
+print("CLI fixture passed: segmented build, restart/resume, immutable template, audit events, delegated revocation, independent access, immutable tool versions, fork lineage and catalog validation and portable environment planning.")

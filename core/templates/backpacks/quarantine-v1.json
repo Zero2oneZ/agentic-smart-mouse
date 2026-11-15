@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "id": "quarantine-backpack",
+  "version": "1.0.0",
+  "architecture_ref": "system-catalog-v1",
+  "harness_ref": "quarantine-harness-v1",
+  "agent_ref": null,
+  "zone": "quarantine",
+  "abilities": [
+    "read_artifact",
+    "parse_document",
+    "validate_schema",
+    "transform_data",
+    "write_artifact"
+  ],
+  "artifacts": {
+    "rootfs": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "seccomp": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "storage": [
+    {
+      "binding_ref": "parser-code",
+      "role": "code_read"
+    },
+    {
+      "binding_ref": "landing-inbox",
+      "role": "inbox_read"
+    },
+    {
+      "binding_ref": "quarantine",
+      "role": "quarantine_write"
+    },
+    {
+      "binding_ref": "staging",
+      "role": "staging_write"
+    },
+    {
+      "binding_ref": "scratch",
+      "role": "scratch"
+    }
+  ],
+  "network": {
+    "mode": "deny",
+    "endpoint_refs": []
+  },
+  "limits": {
+    "cpu_millis": 1000,
+    "memory_mib": 512,
+    "pids": 64,
+    "wall_seconds": 120,
+    "scratch_mib": 256,
+    "output_bytes": 1048576
+  }
+}

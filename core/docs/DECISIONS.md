@@ -67,3 +67,14 @@ hashes, provider sessions and permission grants. A primary ownership tree is one
 view over typed connectivity, execution and provenance graphs; it cannot replace
 SQL authority or live grant checks. Record short decisions and evidence references
 rather than private model chain-of-thought. See [System model](SYSTEM_MODEL.md).
+
+
+## Portable backpacks and the ingestion boundary
+
+Treat a backpack as a hashed requirement definition, separate from the permissions,
+secrets and data bindings of each instance. Local and cloud workers share operation
+contracts, not a shared database file or ambient credentials. Preserve explicit
+backend differences; simulations are not isolation and weaker backend fallback is
+forbidden. The external observer, quarantine processor and trusted admission
+controller have separate identities and roles. Only a scoped receipt-based promotion
+operation crosses into trusted datasets. See [Environments](ENVIRONMENTS.md).

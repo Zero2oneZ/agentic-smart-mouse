@@ -7,4 +7,5 @@ CARGO="${CARGO:-cargo}"
 "$CARGO" test --manifest-path "$ROOT/Cargo.toml" --locked --offline
 "$CARGO" build --manifest-path "$ROOT/Cargo.toml" --locked --offline
 TARGET_DIR="$("$CARGO" metadata --manifest-path "$ROOT/Cargo.toml" --locked --offline --format-version 1 --no-deps | python3 -c 'import json,sys;print(json.load(sys.stdin)["target_directory"])')"
+python3 "$ROOT/tests/test_packaging.py"
 exec python3 "$ROOT/scripts/fixture_workflow.py" "$TARGET_DIR/debug/hotbox-core" "$ROOT/templates/segmented-build-v1.json"

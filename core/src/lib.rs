@@ -2,12 +2,14 @@
 //! Caller identities must come from a trusted host; this crate is not an authentication service.
 mod catalog;
 mod engine;
+mod environment;
 mod lineage;
 mod model;
 mod permissions;
 
 pub use catalog::*;
 pub use engine::{Clock, Engine, SystemClock};
+pub use environment::*;
 pub use lineage::*;
 pub use model::*;
 pub use permissions::{Grant, GrantRequest};

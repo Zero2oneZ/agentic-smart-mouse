@@ -135,3 +135,15 @@ cargo run --locked --offline -- validate-catalog templates/system-catalog-v1.jso
 Catalog validation is implemented; folder provisioning, entity graph persistence,
 ID generation and new agent/data services are not. The bundled catalog does not
 modify the existing Qt media-v1 template or any live storage binding.
+
+## Portable environment plans and packaging
+
+See [Environments](docs/ENVIRONMENTS.md) for capability backpacks, backend
+requirements and the paired observer/ingestion boundary. `backpack-example NAME`,
+`validate-backpack FILE` and `plan-environment FILE` are implemented read-only
+commands. They never run workloads or grant access; every plan is nonlaunchable.
+Examples use explicit placeholder hashes. Backend enforcement and actual admission
+are future adapters. A source-only [Containerfile](Containerfile) and
+[build helper](scripts/package_image.py) prepare CLI packaging from reviewed pinned
+bases without publishing or migrating data. The image build remains unverified in
+this environment because Docker socket access is unavailable.
