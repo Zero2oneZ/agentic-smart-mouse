@@ -1,4 +1,6 @@
 #include "backend.h"
+#include "modelcredentials.h"
+#include "providerreceipts.h"
 #include "gitworkspace.h"
 #include "sessionledger.h"
 #include "theme.h"
@@ -13,14 +15,532 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QQuickItem>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
+#include <QScopeGuard>
+#include <QSqlError>
+#include <QSqlQuery>
+#include <functional>
 #include <QtTest>
 
 class HotboxTests : public QObject {
     Q_OBJECT
   private slots:
+    void toolCreationFormSavesAndOpensItsDevelopmentChat() {
+        const auto previous=qgetenv("HOTBOX_CORE_BINARY");
+        const auto restore=qScopeGuard([&]{if(previous.isNull())qunsetenv("HOTBOX_CORE_BINARY");else qputenv("HOTBOX_CORE_BINARY",previous);});
+        qputenv("HOTBOX_CORE_BINARY",QDir(QCoreApplication::applicationDirPath()).absoluteFilePath("../hotbox-core").toUtf8());
+        QTemporaryDir dir;Backend b(dir.path(),nullptr,false);b.refreshToolRegistry();QTRY_VERIFY_WITH_TIMEOUT(b.toolRegistryReady()&&!b.toolRegistryBusy(),10000);
+        Theme theme(dir.path());Translator translator(dir.filePath("language"),dir.path());QQmlApplicationEngine engine;
+        QStringList warnings;connect(&engine,&QQmlEngine::warnings,this,[&](const QList<QQmlError>& errors){for(const auto &error:errors)warnings<<error.toString();});
+        engine.rootContext()->setContextProperty("backend",&b);engine.rootContext()->setContextProperty("theme",&theme);engine.rootContext()->setContextProperty("translator",&translator);
+        engine.load(QUrl("qrc:/Main.qml"));QVERIFY2(!engine.rootObjects().isEmpty(),qPrintable(warnings.join('\n')));
+        auto *window=qobject_cast<QQuickWindow*>(engine.rootObjects().first());window->setProperty("page","tools");window->show();QTest::qWait(40);
+        auto *view=window->findChild<QObject*>("toolsView");QVERIFY(view);const QVariant category=QString("Writing");
+        QVERIFY(QMetaObject::invokeMethod(view,"newTool",Q_ARG(QVariant,category)));
+        auto *name=window->findChild<QObject*>("toolDraftName"),*purpose=window->findChild<QObject*>("toolDraftPurpose"),*save=window->findChild<QObject*>("saveToolDraft");QVERIFY(name&&purpose&&save);
+        QVERIFY(!save->property("enabled").toBool());name->setProperty("text","Brief formatter");purpose->setProperty("text","Format synthetic notes into a brief.");QTRY_VERIFY(save->property("enabled").toBool());
+        QSignalSpy opened(&b,&Backend::showChat);QVERIFY(QMetaObject::invokeMethod(save,"clicked"));
+        QTRY_COMPARE_WITH_TIMEOUT(opened.size(),1,10000);QCOMPARE(b.title(),QString("Brief formatter"));QCOMPARE(window->property("page").toString(),QString("tools"));
+        QVERIFY(window->findChild<QObject*>("projectChatPanel")->property("visible").toBool());
+        QCOMPARE(b.registeredTools().size(),1);QCOMPARE(b.registeredTools().first().toMap()["menu_category"].toString(),QString("Writing"));QVERIFY(b.registeredTools().first().toMap()["verified"].toBool());
+        QCOMPARE(b.agents()->jobs().size(),0);QCOMPARE(b.tasks()->jobs().size(),0);QTest::qWait(100);
+        QVERIFY(window->grabWindow().save("/tmp/hotbox-tools-flow.png"));QVERIFY2(warnings.isEmpty(),qPrintable(warnings.join('\n')));
+    }
+    void registeredToolsKeepContextAcrossRenameRestartAndReplay() {
+        const auto previous=qgetenv("HOTBOX_CORE_BINARY");
+        const auto restore=qScopeGuard([&]{if(previous.isNull())qunsetenv("HOTBOX_CORE_BINARY");else qputenv("HOTBOX_CORE_BINARY",previous);});
+        qputenv("HOTBOX_CORE_BINARY",QDir(QCoreApplication::applicationDirPath()).absoluteFilePath("../hotbox-core").toUtf8());
+        QTemporaryDir dir;QString tool;int parent=0,chat=0;int count=0;
+        QVariantMap create{{"request_id","create-formatter"},{"name","Brief formatter"},{"purpose","Format fixture notes"},{"menu_category","Writing"}};
+        {
+            Backend b(dir.path(),nullptr,false);parent=b.addCategory("Fixture project","","Parent objective",0);create["category"]=parent;
+            b.refreshToolRegistry();QTRY_VERIFY_WITH_TIMEOUT(b.toolRegistryReady()&&!b.toolRegistryBusy(),10000);
+            auto bad=create;bad["name"]="Bad\nName";QVERIFY(!b.registerToolDraft(bad)["ok"].toBool());
+            const int before=b.categories().size();
+            auto result=b.registerToolDraft(create);QVERIFY2(result["ok"].toBool(),qPrintable(result["error"].toString()));
+            tool=result["tool_id"].toString();QVERIFY(tool.startsWith("tol_"));chat=result["chat"].toInt();QVERIFY(chat>parent);
+            QCOMPARE(b.registerToolDraft(create)["tool_id"].toString(),tool);QCOMPARE(b.categories().size(),before+1);
+            auto wrong=create;wrong["name"]="Different";QVERIFY(!b.registerToolDraft(wrong)["ok"].toBool());
+            QTRY_VERIFY_WITH_TIMEOUT(b.registeredTools().size()==1&&b.registeredTools().first().toMap()["sync_state"]=="saved"&&!b.toolRegistryBusy(),10000);
+            auto entry=b.registeredTools().first().toMap();QVERIFY(entry["verified"].toBool());QCOMPARE(entry["revision"].toInt(),1);QVERIFY(!entry["run_available"].toBool());
+            QVERIFY(b.markToolWheel(tool,"favorites",true));
+            Theme theme(dir.path());Translator translator(dir.filePath("language"),dir.path());QQmlApplicationEngine engine;
+            QStringList warnings;connect(&engine,&QQmlEngine::warnings,this,[&](const QList<QQmlError>& errors){for(const auto &error:errors)warnings<<error.toString();});
+            engine.rootContext()->setContextProperty("backend",&b);engine.rootContext()->setContextProperty("theme",&theme);engine.rootContext()->setContextProperty("translator",&translator);
+            engine.load(QUrl("qrc:/Main.qml"));QVERIFY2(!engine.rootObjects().isEmpty(),qPrintable(warnings.join('\n')));
+            auto *window=qobject_cast<QQuickWindow*>(engine.rootObjects().first());window->setProperty("page","tools");window->show();QTest::qWait(60);
+            auto *overlay=window->findChild<QQuickWindow*>("hotboxOverlay");QVERIFY(overlay);
+            const QVariant toolsTarget=QVariantMap{{"action","tools"}};
+            QVERIFY(QMetaObject::invokeMethod(overlay,"choose",Q_ARG(QVariant,toolsTarget)));
+            auto entries=overlay->property("entries").toList();bool group=false;
+            for(const auto &item:entries)if(item.toMap()["action"]=="tool_group"&&item.toMap()["menu_category"]=="Writing")group=true;
+            QVERIFY(group);
+            const QVariant groupTarget=QVariantMap{{"action","tool_group"},{"menu_category","Writing"}};
+            QVERIFY(QMetaObject::invokeMethod(overlay,"choose",Q_ARG(QVariant,groupTarget)));
+            overlay->setProperty("selectedIndex",0);QTRY_VERIFY_WITH_TIMEOUT(!b.toolRegistryBusy(),10000);QCOMPARE(overlay->property("selectedIndex").toInt(),0);
+            entries=overlay->property("entries").toList();bool found=false;
+            for(const auto &item:entries)if(item.toMap()["tool_id"]==tool){found=true;QVERIFY(QMetaObject::invokeMethod(overlay,"choose",Q_ARG(QVariant,item)));}
+            QVERIFY(found);QCOMPARE(b.agents()->jobs().size(),0);QCOMPARE(b.tasks()->jobs().size(),0);
+            QSignalSpy opened(&b,&Backend::showChat);b.openToolContext(tool);QTRY_COMPARE_WITH_TIMEOUT(opened.size(),1,10000);QCOMPARE(b.currentId(),chat);
+            QCOMPARE(b.registeredTools().first().toMap()["tool_id"].toString(),tool);
+            QCOMPARE(b.registerToolDraft(create)["tool_id"].toString(),tool);
+            b.select(parent);
+            QVariantMap update{{"request_id","rename-formatter"},{"tool_id",tool},{"expected_revision",1},{"name","Brief writer"},{"purpose","Format fixture notes"},{"menu_category","Editing"}};
+            QVERIFY(b.updateToolDraft(update)["ok"].toBool());
+            QTRY_VERIFY_WITH_TIMEOUT(b.registeredTools().first().toMap()["revision"].toInt()==2&&!b.toolRegistryBusy(),10000);
+            QVERIFY(b.updateToolDraft(update)["ok"].toBool());
+            update["request_id"]="stale-update";QVERIFY(!b.updateToolDraft(update)["ok"].toBool());
+            QCOMPARE(b.wheelItems("favorites").last().toMap()["name"].toString(),QString("Brief writer"));
+            auto other=b.addCategory("Unrelated","","",0);QVERIFY(other>0);QVERIFY(b.registeredTools().isEmpty());QVERIFY(b.wheelItems("favorites").isEmpty());
+            QSignalSpy denied(&b,&Backend::showChat);b.openToolContext(tool);QCOMPARE(denied.size(),0);
+            b.select(parent);count=b.categories().size();
+            QVERIFY2(warnings.isEmpty(),qPrintable(warnings.join('\n')));
+        }
+        // Simulate core success followed by a lost Qt receipt. Replay must not duplicate a chat/tool
+        // or permanently restore the original name over a later revision.
+        const QString connection=QUuid::createUuid().toString();
+        {auto db=QSqlDatabase::addDatabase("QSQLITE",connection);db.setDatabaseName(dir.filePath("hotbox.sqlite3"));QVERIFY(db.open());QSqlQuery q(db);QVERIFY(q.exec("UPDATE tool_registry_outbox SET state='pending' WHERE request_id='create-formatter'"));db.close();}
+        QSqlDatabase::removeDatabase(connection);
+        {
+            Backend b(dir.path(),nullptr,false);b.select(parent);QCOMPARE(b.categories().size(),count);QVERIFY(!b.registeredTools().first().toMap()["verified"].toBool());
+            b.refreshToolRegistry();QTRY_VERIFY_WITH_TIMEOUT(b.toolRegistryReady()&&!b.toolRegistryBusy()&&b.registeredTools().first().toMap()["revision"].toInt()==2&&b.registeredTools().first().toMap()["sync_state"]=="saved",10000);
+            auto entry=b.registeredTools().first().toMap();QCOMPARE(entry["name"].toString(),QString("Brief writer"));QCOMPARE(entry["menu_category"].toString(),QString("Editing"));QCOMPARE(entry["chat"].toInt(),chat);QCOMPARE(entry["tool_id"].toString(),tool);
+            QCOMPARE(b.categories().size(),count);QSignalSpy opened(&b,&Backend::showChat);b.openToolContext(tool);QTRY_COMPARE_WITH_TIMEOUT(opened.size(),1,10000);QCOMPARE(b.currentId(),chat);QCOMPARE(b.title(),QString("Brief writer"));
+        }
+    }
+    void toolMappingMismatchCannotOpenAnotherContext() {
+        const auto previous=qgetenv("HOTBOX_CORE_BINARY");
+        const auto restore=qScopeGuard([&]{if(previous.isNull())qunsetenv("HOTBOX_CORE_BINARY");else qputenv("HOTBOX_CORE_BINARY",previous);});
+        qputenv("HOTBOX_CORE_BINARY",QDir(QCoreApplication::applicationDirPath()).absoluteFilePath("../hotbox-core").toUtf8());
+        QTemporaryDir dir;Backend b(dir.path(),nullptr,false);b.refreshToolRegistry();QTRY_VERIFY_WITH_TIMEOUT(b.toolRegistryReady()&&!b.toolRegistryBusy(),10000);
+        auto created=b.registerToolDraft({{"request_id","fixture"},{"name","Fixture tool"},{"purpose","Test mapping"},{"menu_category","Fixtures"}});QVERIFY(created["ok"].toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(b.registeredTools().size()==1&&b.registeredTools().first().toMap()["sync_state"]=="saved"&&!b.toolRegistryBusy(),10000);
+        b.select(1);
+        const QString connection=QUuid::createUuid().toString();
+        {auto db=QSqlDatabase::addDatabase("QSQLITE",connection);db.setDatabaseName(dir.filePath("orchestration.sqlite3"));QVERIFY(db.open());QSqlQuery q(db);QVERIFY(q.exec("UPDATE tool_menu SET document=json_set(document,'$.originating_chat','qt-unrelated')"));db.close();}
+        QSqlDatabase::removeDatabase(connection);
+        QSignalSpy opened(&b,&Backend::showChat);b.openToolContext(created["tool_id"].toString());
+        QTRY_VERIFY_WITH_TIMEOUT(!b.toolRegistryBusy()&&b.toolRegistryProblem().contains("mapping"),10000);
+        QCOMPARE(opened.size(),0);QCOMPARE(b.currentId(),1);QVERIFY(!b.registeredTools().first().toMap()["verified"].toBool());
+    }
+    void missingToolCoreCanBeInstalledAndRetried() {
+        const auto previous=qgetenv("HOTBOX_CORE_BINARY");
+        const auto restore=qScopeGuard([&]{if(previous.isNull())qunsetenv("HOTBOX_CORE_BINARY");else qputenv("HOTBOX_CORE_BINARY",previous);});
+        QTemporaryDir dir;const auto path=dir.filePath("core-helper");qputenv("HOTBOX_CORE_BINARY",path.toUtf8());Backend b(dir.filePath("data"),nullptr,false);
+        b.refreshToolRegistry();QVERIFY(!b.toolRegistryReady());QVERIFY(!b.toolRegistryProblem().isEmpty());
+        QVERIFY(QFile::copy(QDir(QCoreApplication::applicationDirPath()).absoluteFilePath("../hotbox-core"),path));
+        b.retryToolRegistry();QTRY_VERIFY_WITH_TIMEOUT(b.toolRegistryReady()&&!b.toolRegistryBusy(),10000);
+        QVERIFY(b.registeredTools().isEmpty());QVERIFY(b.toolRegistryProblem().isEmpty());
+    }
+    void incompatibleToolRegistryCannotCreateDrafts() {
+        const auto previous=qgetenv("HOTBOX_CORE_BINARY");
+        const auto restore=qScopeGuard([&]{if(previous.isNull())qunsetenv("HOTBOX_CORE_BINARY");else qputenv("HOTBOX_CORE_BINARY",previous);});
+        QTemporaryDir dir;QFile helper(dir.filePath("old-core"));QVERIFY(helper.open(QIODevice::WriteOnly));
+        helper.write("#!/bin/sh\nprintf '%s\\n' '{\"ok\":true,\"result\":{\"schema_version\":99}}'\n");helper.close();QVERIFY(helper.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner));
+        qputenv("HOTBOX_CORE_BINARY",helper.fileName().toUtf8());Backend b(dir.filePath("data"),nullptr,false);
+        b.refreshToolRegistry();QTRY_VERIFY_WITH_TIMEOUT(!b.toolRegistryBusy()&&!b.toolRegistryProblem().isEmpty(),5000);QVERIFY(!b.toolRegistryReady());
+        const int count=b.categories().size();QVERIFY(!b.registerToolDraft({{"request_id","denied"},{"name","Not created"},{"menu_category","Writing"}})["ok"].toBool());QCOMPARE(b.categories().size(),count);
+    }
+    void cloudRolesUsePinnedModelsAndPrivateCredentials() {
+        QTemporaryDir dir;
+        QVERIFY(QDir().mkpath(dir.filePath("bin")));
+        QFile fake(dir.filePath("bin/claude"));
+        QVERIFY(fake.open(QIODevice::WriteOnly));
+        fake.write("#!/bin/sh\nprintf '%s\\n' \"$@\" > arguments.txt\n"
+                   "printf '%s\\n' \"$ANTHROPIC_BASE_URL\" \"$ANTHROPIC_DEFAULT_SONNET_MODEL\" > cloud.txt\n"
+                   "test \"$ANTHROPIC_AUTH_TOKEN\" = sample-cloud-key || exit 5\n"
+                   "test -z \"$ANTHROPIC_API_KEY\" || exit 6\n"
+                   "cat > received.txt\n"
+                   "printf '%s\\n' '{\"type\":\"result\",\"uuid\":\"one\",\"is_error\":false,\"usage\":{\"input_tokens\":2,\"output_tokens\":1,\"cache_read_input_tokens\":0,\"cache_creation_input_tokens\":0}}'\n");
+        fake.close();
+        QVERIFY(fake.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        QFile key(dir.filePath("secrets.env"));
+        QVERIFY(key.open(QIODevice::WriteOnly));key.write("OLLAMA_API_KEY='sample-cloud-key'\n");key.close();
+        QVERIFY(key.setPermissions(QFile::ReadOwner | QFile::WriteOwner));
+        auto oldPath=qgetenv("PATH"), oldKey=qgetenv("OLLAMA_API_KEY");
+        bool keySet=qEnvironmentVariableIsSet("OLLAMA_API_KEY");
+        auto restore=qScopeGuard([&]{qputenv("PATH",oldPath);if(keySet)qputenv("OLLAMA_API_KEY",oldKey);else qunsetenv("OLLAMA_API_KEY");});
+        qputenv("PATH",(dir.filePath("bin")+":/usr/bin").toUtf8());qunsetenv("OLLAMA_API_KEY");
+        Backend backend(dir.path(),nullptr,false);
+        auto *agents=backend.agents();
+        QVERIFY(agents->start("Check",{{"name","Bad"},{"id",1},{"modelRole","unknown"}},"claude").isEmpty());
+        QVERIFY(agents->start("Check",{{"name","Bad"},{"id",1},{"modelRole","builder"}},"codex").isEmpty());
+        QString builder;
+        for (const auto &role : {QString("builder"),QString("vision")}) {
+            QString model=role=="builder"?"deepseek-v4.1-flash":"inkling-2-small";
+            auto id=agents->start("Check role",{{"name",role},{"id",1},{"modelRole",role}},"claude");
+            QVERIFY2(!id.isEmpty(),qPrintable(agents->problem()));
+            QTRY_COMPARE_WITH_TIMEOUT(agents->selected()["state"].toString(),QString("finished"),5000);
+            auto receipt=backend.agentReceipt(id);
+            QVERIFY(receipt["model"].isNull());
+            QCOMPARE(agents->selected()["target"].toMap()["cloudModel"].toString(),model);
+            QCOMPARE(receipt["usage"].toMap()["status"].toString(),QString("known"));
+            auto path=agents->selected()["path"].toString();
+            QFile args(path+"/arguments.txt");QVERIFY(args.open(QIODevice::ReadOnly));QVERIFY(args.readAll().contains("--model\n"+model.toUtf8()+"\n"));
+            QFile cloud(path+"/cloud.txt");QVERIFY(cloud.open(QIODevice::ReadOnly));QCOMPARE(cloud.readAll(),"https://ollama.com\n"+model.toUtf8()+"\n");
+            for(const auto &name:{"PROMPT.txt","run.log"}){QFile output(path+"/"+name);QVERIFY(output.open(QIODevice::ReadOnly));QVERIFY(!output.readAll().contains("sample-cloud-key"));}
+            if(role=="builder")builder=id;
+        }
+        auto child=agents->start("Continue",{{"modelRole","vision"}},"claude",builder);
+        QVERIFY2(!child.isEmpty(),qPrintable(agents->problem()));
+        QTRY_COMPARE_WITH_TIMEOUT(agents->selected()["state"].toString(),QString("finished"),5000);
+        QCOMPARE(agents->selected()["target"].toMap()["cloudModel"].toString(),QString("deepseek-v4.1-flash"));
+        QVERIFY(QFile::remove(key.fileName()));
+        QVERIFY(agents->start("Check",{{"name","No key"},{"id",1},{"modelRole","builder"}},"claude").isEmpty());
+        QVERIFY(agents->problem().contains("OLLAMA_API_KEY"));
+    }
+    void credentialsReadPrivateFileWithoutShellEvaluation() {
+        QTemporaryDir dir;
+        const QByteArray name = "HOTBOX_TEST_PRIVATE_CREDENTIAL";
+        auto old = qgetenv(name.constData());
+        const bool wasSet = qEnvironmentVariableIsSet(name.constData());
+        auto restore = qScopeGuard([&] { if (wasSet) qputenv(name.constData(), old); else qunsetenv(name.constData()); });
+        qunsetenv(name.constData());
+        QFile file(dir.filePath("secrets.env"));
+        auto write = [&](const QByteArray &value) {
+            if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
+            file.write(name + "=" + value + "\n"); file.close();
+            return file.setPermissions(QFile::ReadOwner | QFile::WriteOwner);
+        };
+        for (const auto &value : {QByteArray("sample-key"), QByteArray("\"sample-key\""), QByteArray("'sample-key'")}) {
+            QVERIFY(write(value));
+            QCOMPARE(modelCredential(dir.path(), name), QByteArray("sample-key"));
+        }
+        QVERIFY(write("$(touch should-never-exist)"));
+        QCOMPARE(modelCredential(dir.path(), name), QByteArray("$(touch should-never-exist)"));
+        QVERIFY(!QFile::exists("should-never-exist"));
+        qputenv(name.constData(), "environment-key");
+        QCOMPARE(modelCredential(dir.path(), name), QByteArray("environment-key"));
+        qunsetenv(name.constData());
+        QVERIFY(file.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ReadOther));
+        QVERIFY(modelCredential(dir.path(), name).isEmpty());
+        QVERIFY(write("\"unfinished"));
+        QVERIFY(modelCredential(dir.path(), name).isEmpty());
+    }
+    void providerReceiptsNormalizeWithoutDoubleCounting() {
+        auto line=[](const QJsonObject &value){return QJsonDocument(value).toJson(QJsonDocument::Compact)+'\n';};
+        QJsonObject usage{{"input_tokens",10},{"output_tokens",2},{"cached_input_tokens",4},{"reasoning_output_tokens",1}};
+        QJsonObject codex{{"type","turn.completed"},{"usage",usage}};
+        auto result=ProviderReceipts::normalize("codex",line(codex),true);
+        QCOMPARE(result["status"].toString(),QString("known"));QCOMPARE(result["input_tokens"].toLongLong(),10LL);QCOMPARE(result["output_tokens"].toLongLong(),2LL);
+        QCOMPARE(ProviderReceipts::normalize("codex",line(codex),false)["status"].toString(),QString("partial"));
+        QCOMPARE(ProviderReceipts::normalize("codex",line(codex)+line(codex),true)["status"].toString(),QString("unknown"));
+        codex["id"]="terminal-1";result=ProviderReceipts::normalize("codex",line(codex)+line(codex),true);QCOMPARE(result["status"].toString(),QString("known"));QCOMPARE(result["duplicate_records"].toInt(),1);QCOMPARE(result["input_tokens"].toLongLong(),10LL);
+        auto conflicting=codex;conflicting["usage"]=QJsonObject{{"input_tokens",11},{"output_tokens",2}};
+        QCOMPARE(ProviderReceipts::normalize("codex",line(codex)+line(conflicting),true)["reason"].toString(),QString("ambiguous_terminal_records"));
+        for(auto value:QList<QJsonValue>{-1,1.5,1e13,QString("10"),QJsonValue()}){auto bad=usage;bad["input_tokens"]=value;auto event=codex;event["usage"]=bad;QCOMPARE(ProviderReceipts::normalize("codex",line(event),true)["status"].toString(),QString("unknown"));}
+        QCOMPARE(ProviderReceipts::normalize("codex","diagnostic text\n"+line(codex),true)["status"].toString(),QString("unknown"));
+        QCOMPARE(ProviderReceipts::normalize("codex",QByteArray(1048577,'x'),true)["reason"].toString(),QString("line_limit"));
+        QCOMPARE(ProviderReceipts::normalize("codex",QByteArray(8388609,'x'),true)["reason"].toString(),QString("source_limit"));
+        QJsonObject claude{{"type","result"},{"uuid","result-1"},{"is_error",false},{"usage",QJsonObject{{"input_tokens",10},{"output_tokens",2},{"cache_read_input_tokens",4},{"cache_creation_input_tokens",3}}}};
+        result=ProviderReceipts::normalize("claude",line(claude),true);QCOMPARE(result["status"].toString(),QString("known"));QCOMPARE(result["input_tokens"].toLongLong(),17LL);QCOMPARE(result["provider_input_tokens"].toLongLong(),10LL);
+        claude["is_error"]=true;QVERIFY(ProviderReceipts::normalize("claude",line(claude),true)["provider_failed"].toBool());
+        claude["usage"]=QJsonObject{{"input_tokens",10},{"output_tokens",2}};QCOMPARE(ProviderReceipts::normalize("claude",line(claude),true)["status"].toString(),QString("unknown"));
+        QCOMPARE(ProviderReceipts::normalize("codex",line(claude),true)["status"].toString(),QString("unknown"));
+    }
+    void providerReceiptsPersistAndBlockUnknownFollowups() {
+        QTemporaryDir dir;QDir().mkpath(dir.filePath("bin"));QFile fake(dir.filePath("bin/codex"));
+        auto script=[&](const QByteArray &output){if(!fake.open(QIODevice::WriteOnly|QIODevice::Truncate))return false;fake.write("#!/bin/sh\nprintf '%s\\n' \"$@\" > arguments.txt\ncat > received.txt\n"+output);fake.close();return fake.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner);};
+        QVERIFY(script("printf '%s\\n' '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":12,\"output_tokens\":3}}'\nprintf '%s\\n' '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":999,\"output_tokens\":999}}' >&2\n"));
+        auto old=qgetenv("PATH");auto restore=qScopeGuard([&]{qputenv("PATH",old);});qputenv("PATH",(dir.filePath("bin")+":/usr/bin").toUtf8());QString id,digest;
+        {
+            Backend b(dir.filePath("data"),nullptr,false);auto *agents=b.agents();id=agents->start("Receipt",{{"name","Receipt"},{"id",1}},"codex");QVERIFY(!id.isEmpty());QTRY_COMPARE_WITH_TIMEOUT(agents->selected()["state"].toString(),QString("finished"),5000);
+            auto receipt=b.agentReceipt(id);QVERIFY(receipt["ok"].toBool());QCOMPARE(receipt["usage"].toMap()["input_tokens"].toLongLong(),12LL);QCOMPARE(receipt["outcome"].toString(),QString("succeeded"));QCOMPARE(receipt["verification"].toString(),QString("unverified"));QVERIFY(receipt["cost"].isNull());digest=receipt["receipt_digest"].toString();QCOMPARE(digest.size(),64);
+            QFile args(agents->selected()["path"].toString()+"/arguments.txt");QVERIFY(args.open(QIODevice::ReadOnly));QVERIFY(args.readAll().contains("--json"));
+            QCOMPARE(b.optimizerReport()["reportedInputTokens"].toLongLong(),12LL);
+            auto other=b.addCategory("Outside","","",0);b.select(other);QVERIFY(!b.agentReceipt(id)["ok"].toBool());QVERIFY(b.contextTool("read_agent_receipt",{{"run",id}}).contains("error"));b.select(1);
+            QVERIFY(script("printf 'plain output\\n'\n"));auto unknown=agents->start("Unknown",{{"name","Unknown"},{"id",1}},"codex");QVERIFY(!unknown.isEmpty());QTRY_COMPARE(agents->selected()["state"].toString(),QString("finished"));QCOMPARE(b.agentReceipt(unknown)["usage"].toMap()["status"].toString(),QString("unknown"));QVERIFY(agents->start("Follow up",{},"codex",unknown).isEmpty());QVERIFY(agents->problem().contains("unknown or partial"));
+            QVERIFY(script("printf '%s\\n' '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":2,\"output_tokens\":1}}'\nexit 3\n"));auto failed=agents->start("Fail",{{"name","Fail"},{"id",1}},"codex");QVERIFY(!failed.isEmpty());QTRY_COMPARE(agents->selected()["state"].toString(),QString("attention"));QCOMPARE(b.agentReceipt(failed)["outcome"].toString(),QString("failed"));QCOMPARE(b.agentReceipt(failed)["exit_code"].toInt(),3);QCOMPARE(b.agentReceipt(failed)["usage"].toMap()["status"].toString(),QString("known"));
+        }
+        {
+            Backend b(dir.filePath("data"),nullptr,false);QCOMPARE(b.agentReceipt(id)["receipt_digest"].toString(),digest);
+        }
+        auto connection=QUuid::createUuid().toString();{auto db=QSqlDatabase::addDatabase("QSQLITE",connection);db.setDatabaseName(dir.filePath("data/hotbox.sqlite3"));QVERIFY(db.open());QSqlQuery q(db);QVERIFY(!q.exec("UPDATE provider_receipts SET document='{}'"));QVERIFY(!q.exec("DELETE FROM provider_receipts"));db.close();}QSqlDatabase::removeDatabase(connection);
+    }
+    void providerReceiptsRecoverCancelAndCaptureLimits() {
+        QTemporaryDir dir;QDir().mkpath(dir.filePath("bin"));QFile fake(dir.filePath("bin/codex"));
+        auto script=[&](const QByteArray &output){if(!fake.open(QIODevice::WriteOnly|QIODevice::Truncate))return false;fake.write("#!/bin/sh\ncat >/dev/null\n"+output);fake.close();return fake.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner);};
+        auto old=qgetenv("PATH");auto restore=qScopeGuard([&]{qputenv("PATH",old);});qputenv("PATH",(dir.filePath("bin")+":/usr/bin").toUtf8());
+        Backend b(dir.filePath("data"),nullptr,false);auto *agents=b.agents();auto target=QVariantMap{{"name","Limits"},{"id",1}};
+        QVERIFY(script("sleep 30\n"));auto cancelled=agents->start("Cancel",target,"codex");QVERIFY(!cancelled.isEmpty());agents->stop(cancelled);QTRY_VERIFY_WITH_TIMEOUT(!agents->receipt(cancelled).isEmpty(),5000);QCOMPARE(agents->receipt(cancelled)["outcome"].toString(),QString("cancelled"));QCOMPARE(agents->receipt(cancelled)["usage"].toMap()["status"].toString(),QString("unknown"));
+        auto timeout=agents->start("Timeout",target,"codex");QVERIFY(!timeout.isEmpty());QTRY_VERIFY_WITH_TIMEOUT(!agents->findChildren<QProcess*>().isEmpty(),1000);QProcess *running=nullptr;for(auto *p:agents->findChildren<QProcess*>())if(p->state()!=QProcess::NotRunning)running=p;QVERIFY(running);QTRY_COMPARE_WITH_TIMEOUT(running->state(),QProcess::Running,1000);QTRY_VERIFY_WITH_TIMEOUT(!running->findChildren<QTimer*>().isEmpty(),1000);running->findChildren<QTimer*>().first()->start(20);QTRY_VERIFY_WITH_TIMEOUT(!agents->receipt(timeout).isEmpty(),5000);QCOMPARE(agents->receipt(timeout)["outcome"].toString(),QString("timed_out"));
+        QVERIFY(script("python3 -c 'print(\"x\" * 9000000)'\n"));auto limited=agents->start("Output limit",target,"codex");QVERIFY(!limited.isEmpty());QTRY_VERIFY_WITH_TIMEOUT(!agents->receipt(limited).isEmpty(),10000);QCOMPARE(agents->receipt(limited)["outcome"].toString(),QString("output_limit"));QVERIFY(agents->receipt(limited)["usage"].toMap()["status"]!="known");QVERIFY(QFileInfo(agents->selected()["path"].toString()+"/run.log").size()<=8388608);
+        QString recovered="recovered-attempt";auto connection=QUuid::createUuid().toString();
+        {auto db=QSqlDatabase::addDatabase("QSQLITE",connection);db.setDatabaseName(dir.filePath("data/hotbox.sqlite3"));QVERIFY(db.open());QSqlQuery q(db);q.prepare("INSERT INTO agent_runs(id,title,provider,target,prompt,path,state,detail,created) VALUES(?,'Interrupted','codex','{\"id\":1}','old','/missing','running','old','old')");q.addBindValue(recovered);QVERIFY(q.exec());db.close();}QSqlDatabase::removeDatabase(connection);
+        {Backend restart(dir.filePath("data"),nullptr,true);auto receipt=restart.agentReceipt(recovered);QVERIFY(receipt["ok"].toBool());QCOMPARE(receipt["outcome"].toString(),QString("interrupted"));QCOMPARE(receipt["usage"].toMap()["status"].toString(),QString("unknown"));}
+    }
+    void rollingLedgerMigratesVersionOneAndProtectsContracts() {
+        QTemporaryDir dir;
+        QString road;
+        {
+            Backend b(dir.path(), nullptr, false);
+            road = b.buildAction("create", {{"schema_version", 1},
+                                            {"request_id", "before-migration"},
+                                            {"title", "Preserve existing work"}})["roadmap"]
+                       .toString();
+        }
+        auto connection = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", connection);
+            db.setDatabaseName(dir.filePath("hotbox.sqlite3"));
+            QVERIFY(db.open());
+            QSqlQuery q(db);
+            QVERIFY(q.exec("DROP TABLE build_contracts"));
+            QVERIFY(q.exec("DELETE FROM build_schema WHERE version=2"));
+            db.close();
+        }
+        QSqlDatabase::removeDatabase(connection);
+        {
+            Backend b(dir.path(), nullptr, false);
+            auto saved = b.buildAction("read", {{"schema_version", 1}, {"roadmap", road}});
+            QCOMPARE(saved["title"].toString(), QString("Preserve existing work"));
+            auto step = b.buildAction("node.add", {{"schema_version", 1},
+                                                   {"request_id", "after-migration"},
+                                                   {"roadmap", road},
+                                                   {"expected_revision", 1},
+                                                   {"kind", "step"},
+                                                   {"title", "Contract"}});
+            QVERIFY(step["ok"].toBool());
+            QVERIFY(b.buildAction("contract.save", {{"schema_version", 1},
+                                                    {"request_id", "contract-after-migration"},
+                                                    {"roadmap", road},
+                                                    {"expected_revision", 2},
+                                                    {"node", step["node"]},
+                                                    {"acceptance", "Works"},
+                                                    {"implementation", "src/buildledger.cpp"},
+                                                    {"verification", "Temporary migration test"}})["ok"]
+                        .toBool());
+        }
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", connection);
+            db.setDatabaseName(dir.filePath("hotbox.sqlite3"));
+            QVERIFY(db.open());
+            QSqlQuery q(db);
+            QVERIFY(!q.exec("UPDATE build_contracts SET acceptance='tampered'"));
+            QVERIFY(!q.exec("DELETE FROM build_contracts"));
+            QVERIFY(q.exec("SELECT MAX(version) FROM build_schema"));
+            QVERIFY(q.next());
+            QCOMPARE(q.value(0).toInt(), 2);
+            db.close();
+        }
+        QSqlDatabase::removeDatabase(connection);
+    }
+    void rollingLedgerContractsGuideAndForkEvidence() {
+        QTemporaryDir dir;
+        Backend b(dir.path(), nullptr, false);
+        auto road = b.buildAction(
+            "create",
+            {{"schema_version", 1}, {"request_id", "rolling"}, {"title", "Rolling work"}})["roadmap"];
+        auto read = [&] { return b.buildAction("read", {{"schema_version", 1}, {"roadmap", road}}); };
+        int serial = 0;
+        auto change = [&](const QString &op, QVariantMap args) {
+            args["schema_version"] = 1;
+            args["request_id"] = QString("rolling-%1").arg(++serial);
+            args["roadmap"] = road;
+            args["expected_revision"] = read()["revision"];
+            return b.buildAction(op, args);
+        };
+        auto step = change("node.add", {{"kind", "step"}, {"title", "Implement contract"}})["node"];
+        auto guide = [&] {
+            return b.buildAction("guide", {{"schema_version", 1}, {"roadmap", road}, {"node", step}});
+        };
+        QCOMPARE(guide()["items"].toList().first().toMap()["guidance"].toString(),
+                 QString("define_contract"));
+        auto fields = QVariantMap{{"node", step},
+                                  {"acceptance", "Output survives restart"},
+                                  {"implementation", "src/buildledger.cpp: BuildLedger::call"},
+                                  {"verification", "Run temporary database persistence tests"}};
+        auto first = change("contract.save", fields);
+        QVERIFY(first["ok"].toBool());
+        QCOMPARE(guide()["items"].toList().first().toMap()["guidance"].toString(), QString("implement"));
+        QVERIFY(!change("contract.save", fields)["ok"].toBool());
+        auto snapshot = change("checkpoint", {});
+        QVERIFY(snapshot["ok"].toBool());
+        fields["parent_contract"] = first["contract"];
+        fields["acceptance"] = "Updated acceptance";
+        auto second = change("contract.save", fields);
+        QVERIFY(second["ok"].toBool());
+        QCOMPARE(read()["contracts"].toList().size(), 2);
+        auto references=b.contextTool("read_build_roadmap",{{"roadmap",road}})["contracts"].toList();QVERIFY(!references.first().toMap().contains("acceptance"));
+        auto full=b.contextTool("read_build_contract",{{"roadmap",road},{"contract",second["contract"]}});QCOMPARE(full["contract"].toMap()["acceptance"].toString(),QString("Updated acceptance"));
+        QCOMPARE(guide()["items"].toList().first().toMap()["contract"].toMap()["id"], second["contract"]);
+        auto event = b.recordEvent(
+            1, "command.finished", "Check passed",
+            QString::fromUtf8(
+                QJsonDocument(QJsonObject{{"exitCode", 0}, {"output", QString(9000, 'x')}}).toJson()));
+        QVERIFY(change("link",
+                       {{"node", step}, {"kind", "terminal_command"}, {"ref", QString::number(event)}})["ok"]
+                    .toBool());
+        QVERIFY(change("node.update", {{"node", step}, {"state", "recorded"}})["ok"].toBool());
+        auto current = guide();
+        auto item = current["items"].toList().first().toMap();
+        QCOMPARE(item["guidance"].toString(), QString("review_evidence"));
+        QCOMPARE(item["verification"].toString(), QString("unverified"));
+        QCOMPARE(item["checks"].toList().first().toMap()["outcome"].toString(), QString("command_passed"));
+        QCOMPARE(guide()["digest"], current["digest"]);
+        auto fork = change("fork", {{"title", "Branch recorded work"}, {"node", step}});
+        QVERIFY(fork["ok"].toBool());
+        auto branch = b.buildAction("guide", {{"schema_version", 1}, {"roadmap", fork["roadmap"]}});
+        auto inherited = branch["items"].toList().first().toMap();
+        QVERIFY(inherited["checks"].toList().first().toMap()["inherited"].toBool());
+        QCOMPARE(inherited["verification"].toString(), QString("unverified"));
+        auto old =
+            change("fork", {{"title", "Before contract change"}, {"checkpoint", snapshot["checkpoint"]}});
+        auto historical = b.buildAction("read", {{"schema_version", 1}, {"roadmap", old["roadmap"]}});
+        QCOMPARE(historical["contracts"].toList().first().toMap()["parent_contract"], first["contract"]);
+        QCOMPARE(historical["contracts"].toList().first().toMap()["acceptance"].toString(),
+                 QString("Output survives restart"));
+        auto idea = change("node.add", {{"kind", "idea"}, {"title", "Future possibility"}});
+        QVERIFY(idea["ok"].toBool());
+        auto proposal =
+            b.buildAction("guide", {{"schema_version", 1}, {"roadmap", road}, {"node", idea["node"]}});
+        QCOMPARE(proposal["items"].toList().first().toMap()["guidance"].toString(),
+                 QString("review_proposal"));
+        for (int i = 0; i < 16; ++i)
+            QVERIFY(change("node.add", {{"kind", "addition"}, {"title", "Additional work"}})["ok"].toBool());
+        auto bounded = b.buildAction("guide", {{"schema_version", 1}, {"roadmap", road}});
+        QVERIFY(bounded["items"].toList().size() <= 12);
+        QVERIFY(bounded["omitted"].toInt() > 0);
+        QVERIFY(QJsonDocument::fromVariant(bounded).toJson(QJsonDocument::Compact).size() < 20000);
+        QVERIFY(b.optimizerReport()["rollingLedger"].toMap()["visibleCount"].toInt() >= 3);
+        auto other = b.addCategory("Other", "", "", 0);
+        b.select(other);
+        QVERIFY(!guide()["ok"].toBool());
+        QVERIFY(!b.contextTool("read_build_guidance",{{"roadmap",road}})["ok"].toBool());
+    }
+    void buildLedgerProtectsImmutableEvidenceAndObjects() {
+        QTemporaryDir dir;Backend b(dir.path(),nullptr,false);
+        auto road=b.buildAction("create",{{"schema_version",1},{"request_id","make"},{"title","Private docs"}});QVERIFY(road["ok"].toBool());
+        auto doc=b.buildAction("document.save",{{"schema_version",1},{"request_id","doc"},{"roadmap",road["roadmap"]},{"expected_revision",1},{"title","Readme"},{"content","immutable content"}});QVERIFY(doc["ok"].toBool());
+        auto connection=QUuid::createUuid().toString();
+        {
+            auto db=QSqlDatabase::addDatabase("QSQLITE",connection);db.setDatabaseName(dir.filePath("hotbox.sqlite3"));QVERIFY(db.open());QSqlQuery q(db);
+            QVERIFY(!q.exec("UPDATE build_doc_versions SET content='changed'"));QVERIFY(q.lastError().text().contains("immutable"));QVERIFY(!q.exec("DELETE FROM build_changes"));db.close();
+        }
+        QSqlDatabase::removeDatabase(connection);
+        QFile object(dir.filePath("build-ledger/objects/")+doc["digest"].toString()+".txt");QVERIFY(object.open(QIODevice::WriteOnly|QIODevice::Truncate));object.write("corrupt");object.close();
+        auto rejected=b.buildAction("document.save",{{"schema_version",1},{"request_id","repeat-object"},{"roadmap",road["roadmap"]},{"expected_revision",2},{"title","Another"},{"content","immutable content"}});QVERIFY(!rejected["ok"].toBool());
+        QCOMPARE(b.buildAction("read",{{"schema_version",1},{"roadmap",road["roadmap"]}})["revision"].toInt(),2);
+        QVERIFY(!b.buildAction("node.add",{{"schema_version",1},{"request_id","bad-type"},{"roadmap",road["roadmap"]},{"expected_revision",QString("2")},{"kind","step"},{"title","No coercion"}})["ok"].toBool());
+    }
+    void agentRunsBindToBuildStepsBeforeLaunch() {
+        QTemporaryDir dir;QDir().mkpath(dir.filePath("bin"));QFile fake(dir.filePath("bin/codex"));QVERIFY(fake.open(QIODevice::WriteOnly));fake.write("#!/bin/sh\ncat > received.txt\nprintf 'bound output\\n'\n");fake.close();QVERIFY(fake.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner));
+        auto old=qgetenv("PATH");auto restore=qScopeGuard([&]{qputenv("PATH",old);});qputenv("PATH",(dir.filePath("bin")+":/usr/bin").toUtf8());
+        Backend b(dir.filePath("data"),nullptr,false);auto road=b.buildAction("create",{{"schema_version",1},{"request_id","road"},{"title","Build"}});QVERIFY(road["ok"].toBool());
+        auto step=b.buildAction("node.add",{{"schema_version",1},{"request_id","step"},{"roadmap",road["roadmap"]},{"expected_revision",1},{"kind","step"},{"title","Test"}});QVERIFY(step["ok"].toBool());
+        auto target=QVariantMap{{"name","Build"},{"id",1},{"build",road["roadmap"]},{"step",step["node"]}};
+        auto id=b.agents()->start("Bound test",target,"codex");QVERIFY(!id.isEmpty());QTRY_COMPARE_WITH_TIMEOUT(b.agents()->selected()["state"].toString(),QString("finished"),5000);
+        auto saved=b.buildAction("read",{{"schema_version",1},{"roadmap",road["roadmap"]}});QCOMPARE(saved["links"].toList().size(),1);QCOMPARE(saved["links"].toList().first().toMap()["ref"].toString(),id);
+        auto count=b.agents()->jobs().size();target["step"]="missing";QVERIFY(b.agents()->start("Must not launch",target,"codex").isEmpty());QCOMPARE(b.agents()->jobs().size(),count);
+        auto context=b.agents()->selected()["target"].toMap()["buildContext"].toMap();QCOMPARE(context["revision"].toInt(),2);QVERIFY(!context["digest"].toString().isEmpty());
+        QFile received(dir.filePath("data/agent-runs/")+id+"/received.txt");QVERIFY(received.open(QIODevice::ReadOnly));QVERIFY(received.readAll().contains("buildContext"));
+        b.agents()->setBuildContext([&](const QString &r,const QString &n,int){auto snapshot=b.buildAction("guide",{{"schema_version",1},{"roadmap",r},{"node",n}});b.buildAction("node.add",{{"schema_version",1},{"request_id","race"},{"roadmap",r},{"expected_revision",snapshot["revision"]},{"kind","issue"},{"title","Concurrent change"}});return snapshot;});
+        target["step"]=step["node"];QVERIFY(b.agents()->start("Stale guidance must not launch",target,"codex").isEmpty());auto failed=b.agents()->jobs().first().toMap();QVERIFY(!QFileInfo(dir.filePath("data/agent-runs/")+failed["id"].toString()+"/received.txt").exists());
+    }
+    void buildLedgerVersionsForksAndScopes() {
+        QTemporaryDir dir;QString road,node,version,checkpoint;
+        {
+            Backend b(dir.path(),nullptr,false);auto workspace=b.addCategory("Ledger project","","",0);
+            auto create=QVariantMap{{"schema_version",1},{"request_id","create-one"},{"title","Build plan"},{"branch_ref","main"}};
+            auto first=b.buildAction("create",create);QVERIFY2(first["ok"].toBool(),qPrintable(first["error"].toString()));road=first["roadmap"].toString();
+            QCOMPARE(b.buildAction("create",create)["roadmap"].toString(),road);QVERIFY(b.buildAction("create",create)["replayed"].toBool());
+            create["title"]="Different";QVERIFY(!b.buildAction("create",create)["ok"].toBool());
+            auto read=[&]{return b.buildAction("read",{{"schema_version",1},{"roadmap",road}});};
+            int serial=0;auto change=[&](const QString &op,QVariantMap args){args["schema_version"]=1;args["request_id"]=QString("change-%1").arg(++serial);args["roadmap"]=road;args["expected_revision"]=read()["revision"];return b.buildAction(op,args);};
+            auto milestone=change("node.add",{{"kind","milestone"},{"title","Working build"}});QVERIFY(milestone["ok"].toBool());
+            auto step=change("node.add",{{"kind","step"},{"parent",milestone["node"]},{"title","Build API"}});QVERIFY(step["ok"].toBool());node=step["node"].toString();
+            QVERIFY(change("node.add",{{"kind","substep"},{"parent",node},{"title","Validate requests"}})["ok"].toBool());
+            auto revision=read()["revision"];QVERIFY(!change("node.update",{{"node",node},{"state","verified"}})["ok"].toBool());QCOMPARE(read()["revision"],revision);
+            QVERIFY(!b.buildAction("node.add",{{"schema_version",1},{"request_id","stale"},{"roadmap",road},{"expected_revision",1},{"kind","step"},{"title","Wrong revision"}})["ok"].toBool());
+            auto event=b.recordEvent(workspace,"command.finished","Tests failed","exit 1");QVERIFY(change("link",{{"node",node},{"kind","terminal_command"},{"ref",QString::number(event)}})["ok"].toBool());
+            auto doc=change("document.save",{{"node",node},{"title","API contract"},{"content",QString("password=private-example\n")+QString(7000,'a')}});QVERIFY2(doc["ok"].toBool(),qPrintable(doc["error"].toString()));version=doc["version"].toString();
+            auto content=b.buildAction("document.read",{{"schema_version",1},{"roadmap",road},{"version",version}});QVERIFY(!content["content"].toString().contains("private-example"));QVERIFY(content["nextOffset"].toInt()>0);
+            auto saved=change("checkpoint",{});QVERIFY(saved["ok"].toBool());checkpoint=saved["checkpoint"].toString();
+            QVERIFY(change("document.save",{{"document",doc["document"]},{"parent_version",version},{"content","second version"}})["ok"].toBool());
+            QVERIFY(!change("document.save",{{"document",doc["document"]},{"parent_version",version},{"content","stale version"}})["ok"].toBool());
+            auto sourceRevision=read()["revision"];auto fork=change("fork",{{"title","Alternative"},{"branch_ref","experiment"},{"checkpoint",checkpoint}});QVERIFY2(fork["ok"].toBool(),qPrintable(fork["error"].toString()));QCOMPARE(read()["revision"],sourceRevision);
+            auto branch=b.buildAction("read",{{"schema_version",1},{"roadmap",fork["roadmap"]}});QCOMPARE(branch["nodes"].toList().size(),3);QCOMPARE(branch["links"].toList().size(),1);
+            auto forkVersion=branch["documents"].toList().first().toMap();QCOMPARE(forkVersion["parent_version"].toString(),version);QCOMPARE(forkVersion["number"].toInt(),1);
+            auto forkContent=b.buildAction("document.read",{{"schema_version",1},{"roadmap",fork["roadmap"]},{"version",forkVersion["version"]}});QVERIFY(forkContent["content"].toString()!=QString("second version"));
+            auto piece=change("fork",{{"title","API branch"},{"node",node},{"checkpoint",checkpoint}});QVERIFY(piece["ok"].toBool());auto subtree=b.buildAction("read",{{"schema_version",1},{"roadmap",piece["roadmap"]}});QCOMPARE(subtree["nodes"].toList().size(),2);QCOMPARE(subtree["base_node"].toString(),node);QVERIFY(subtree["nodes"].toList().first().toMap()["parent"].toString().isEmpty());
+            auto other=b.addCategory("Outside","","",0);b.select(other);QVERIFY(!read()["ok"].toBool());QVERIFY(b.contextTool("read_build_roadmap",{{"roadmap",road}}).contains("error"));
+            b.select(1);QVERIFY(read()["ok"].toBool());QVERIFY(b.contextTool("read_build_document",{{"roadmap",road},{"version",version},{"offset",0}})["ok"].toBool());
+            auto history=b.buildAction("history",{{"schema_version",1},{"roadmap",road}});QVERIFY(!history["changes"].toList().isEmpty());QCOMPARE(first["master_chat"].toInt(),1);
+        }
+        {
+            Backend b(dir.path(),nullptr,false);auto result=b.buildAction("read",{{"schema_version",1},{"roadmap",road}});QVERIFY(result["ok"].toBool());QCOMPARE(result["documents"].toList().size(),2);
+            QVERIFY(b.buildAction("checkpoint.read",{{"schema_version",1},{"roadmap",road},{"checkpoint",checkpoint}})["ok"].toBool());
+            Theme theme(dir.path());Translator translator(dir.filePath("language"),dir.path());QQmlApplicationEngine engine;
+            engine.rootContext()->setContextProperty("backend",&b);engine.rootContext()->setContextProperty("theme",&theme);engine.rootContext()->setContextProperty("translator",&translator);engine.load(QUrl("qrc:/Main.qml"));QVERIFY(!engine.rootObjects().isEmpty());
+            auto *window=qobject_cast<QQuickWindow*>(engine.rootObjects().first());window->setProperty("page",QString("builds"));auto *view=window->findChild<QObject*>("buildLedgerView");QVERIFY(view);QVERIFY(QMetaObject::invokeMethod(view,"choose",Q_ARG(QVariant,QVariant(road))));window->show();QTest::qWait(100);QVERIFY(window->grabWindow().save("/tmp/hotbox-build-ledger-preview.png"));
+        }
+    }
+    void masterLoopTracksReportedUsageAndParentBudgets() {
+        QTemporaryDir dir;QDir().mkpath(dir.filePath("bin"));QFile fake(dir.filePath("bin/codex"));
+        auto write=[&](int input){if(!fake.open(QIODevice::WriteOnly|QIODevice::Truncate))return false;fake.write(("#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":"+QString::number(input)+",\"output_tokens\":3}}'\n").toUtf8());fake.close();return fake.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner);};QVERIFY(write(12));
+        const auto old=qgetenv("PATH");auto restore=qScopeGuard([&]{qputenv("PATH",old);});qputenv("PATH",(dir.filePath("bin")+":/usr/bin").toUtf8());
+        Backend b(dir.filePath("data"),nullptr,false);auto *agents=b.agents();auto run=agents->start("Review a loop",{{"name","Master loop"},{"id",1}},"codex");QVERIFY(!run.isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(agents->selected()["state"].toString(),QString("finished"),5000);
+        auto report=b.optimizerReport();QCOMPARE(report["reportedInputTokens"].toLongLong(),12LL);QCOMPARE(report["reportedOutputTokens"].toLongLong(),3LL);QCOMPARE(report["usageUnknown"].toInt(),0);
+        auto next=agents->start("Check again",{},"codex",run);QVERIFY(!next.isEmpty());QTRY_COMPARE(agents->selected()["state"].toString(),QString("finished"));QCOMPARE(b.optimizerReport()["parentRuns"].toInt(),1);QCOMPARE(agents->selected()["loop"].toMap()["root"].toString(),run);QCOMPARE(agents->selected()["loop"].toMap()["depth"].toInt(),1);QVERIFY(agents->selected()["loop"].toMap()["policyRevision"].toString().size()==64);
+        QVERIFY(write(128000));auto large=agents->start("Budget example",{{"name","Example"},{"id",1}},"codex");QVERIFY(!large.isEmpty());QTRY_COMPARE(agents->selected()["state"].toString(),QString("finished"));QVERIFY(agents->start("Again",{},"codex",large).isEmpty());
+        auto child=b.addCategory("Scoped","","",0);b.select(child);QVERIFY(b.contextTool("inspect_master_loop",{}).contains("error"));b.select(1);QVERIFY(!b.contextTool("inspect_master_loop",{}).contains("error"));
+    }
+    void runtimeReportSeparatesPrivateStateAndOutputs() {
+        QTemporaryDir dir;Backend b(dir.filePath("data"),nullptr,false);auto report=b.runtimeReport();
+        QVERIFY(report["databaseOk"].toBool());QVERIFY(!report["runtimeInsideGit"].toBool());
+        auto locations=report["storage"].toList();QCOMPARE(locations.size(),6);
+        QSet<QString> paths;for(auto entry:locations){auto row=entry.toMap();QVERIFY(!row["purpose"].toString().isEmpty());paths.insert(row["path"].toString());}QCOMPARE(paths.size(),6);
+        QDir().mkpath(dir.filePath("data/.git"));QFile head(dir.filePath("data/.git/HEAD"));QVERIFY(head.open(QIODevice::WriteOnly));head.write("ref: refs/heads/main\n");head.close();
+        QVERIFY(b.runtimeReport()["runtimeInsideGit"].toBool());QVERIFY(!b.runtimeReport()["ok"].toBool());
+    }
+    void activityFeedPagesAndScopesDetails() {
+        QTemporaryDir dir;Backend b(dir.path(),nullptr,false);auto child=b.addCategory("Trace","","",0);qint64 oldest=0;
+        for(int i=0;i<45;i++){auto id=b.recordEvent(child,i==0?"command.finished":"tool.result",QString("Step %1").arg(i),"payload");if(i==0)oldest=id;}
+        QCOMPARE(b.activityPage().size(),40);auto page=b.activityPage(b.activityPage().last().toMap()["id"].toLongLong());QVERIFY(!page.isEmpty());QCOMPARE(b.activityDetail(oldest)["content"].toString(),QString("payload"));
+        auto other=b.addCategory("Other","","",0);b.select(other);QVERIFY(b.activityDetail(oldest).contains("error"));b.select(1);QVERIFY(!b.activityDetail(oldest).contains("error"));QVERIFY(!b.activityPage().isEmpty());
+    }
+    void feedOriginsStayAttachedToMessages() {
+        QTemporaryDir dir;int category;QVariantMap first;
+        {
+            Backend b(dir.path(),nullptr,false);category=b.addCategory("Weather","","",0);
+            first=b.identifyFeed(category,{"Favorites","Weather","Chat"},"favorites","Chat",true);
+            QVERIFY(!first.isEmpty());QCOMPARE(first,b.identifyFeed(category,{"Favorites","Weather","Chat"},"favorites","Chat",false));
+            b.send("First request");
+            auto second=b.identifyFeed(category,{"Pinned","Weather","Chat"},"pinned","Chat",true);
+            QVERIFY(first["mark"]!=second["mark"]);
+            QCOMPARE(b.messages().first().toMap()["origin"].toMap(),first);
+            QCOMPARE(b.feedIdentity(),second);
+            b.send("Second request, from Pinned");
+            Theme theme(dir.path());Translator translator(dir.filePath("language"),dir.path());QQmlApplicationEngine engine;
+            engine.rootContext()->setContextProperty("backend",&b);engine.rootContext()->setContextProperty("theme",&theme);engine.rootContext()->setContextProperty("translator",&translator);
+            engine.load(QUrl("qrc:/Main.qml"));QVERIFY(!engine.rootObjects().isEmpty());
+            auto *window=qobject_cast<QQuickWindow*>(engine.rootObjects().first());window->setProperty("page",QString("chat"));window->show();QTest::qWait(80);QVERIFY(window->grabWindow().save("/tmp/hotbox-feed-preview.png"));
+            auto *feed=window->findChild<QObject*>("chatFeed");QVERIFY(feed);
+            auto *panel=window->findChild<QObject*>("projectChatPanel");QVERIFY(panel);QVERIFY(panel->property("visible").toBool());
+            auto *heading=window->findChild<QObject*>("projectChatHeading");QVERIFY(heading);QCOMPARE(heading->property("text").toString(),QString("Weather"));
+            QCOMPARE(window->property("page").toString(),QString("tasks"));
+            const auto posts=feed->property("model").toList();QVERIFY(posts.size()>=2);
+            QVERIFY(posts.first().toMap()["post"].toBool());
+
+            std::function<QQuickItem*(QQuickItem*,const QString&)> visual=[&](QQuickItem *item,const QString &name)->QQuickItem*{if(item->objectName()==name)return item;for(auto *child:item->childItems())if(auto *found=visual(child,name))return found;return nullptr;};
+            auto *session=visual(window->contentItem(),"sessionDisclosure");QVERIFY(session);QVERIFY(QMetaObject::invokeMethod(session,"clicked"));QTest::qWait(30);
+            auto *disclosure=visual(window->contentItem(),"activityDisclosure");QVERIFY(disclosure);QVERIFY(QMetaObject::invokeMethod(disclosure,"clicked"));QTest::qWait(30);
+            QVERIFY(!feed->property("detailCache").toMap().isEmpty());QVERIFY(window->grabWindow().save("/tmp/hotbox-activity-preview.png"));
+feed->setProperty("followTail",false);b.send("Another update");QTest::qWait(30);QVERIFY(!feed->property("followTail").toBool());
+
+            QVERIFY(b.identifyFeed(category,{"Bad"},"unknown","Chat",true).isEmpty());
+            auto other=b.addCategory("Other","","",0);b.select(other);QVERIFY(b.feedIdentity()["mark"]!=first["mark"]);
+        }
+        {
+            Backend b(dir.path(),nullptr,false);b.select(category);
+            QCOMPARE(b.messages().first().toMap()["origin"].toMap(),first);
+            QCOMPARE(b.feedIdentity()["spread"].toString(),QString("pinned"));
+        }
+    }
     void persistenceAndArchives() {
         QTemporaryDir dir;
         int parent, child;
@@ -701,6 +1221,237 @@ class HotboxTests : public QObject {
         QVERIFY(b.architectureAction("ensure", args).contains("error"));
         QVERIFY(source.open(QIODevice::ReadOnly));
         QCOMPARE(source.readAll(), QByteArray("user source content"));
+    }
+    void notesTasksRecoverAndFinishWithoutAWindow() {
+        const QByteArray previous = qgetenv("HOTBOX_CORE_BINARY");
+        const QString helper = QDir(QCoreApplication::applicationDirPath()).absoluteFilePath("../hotbox-core");
+        QVERIFY(QFileInfo(helper).isExecutable());
+        qputenv("HOTBOX_CORE_BINARY", helper.toUtf8());
+        QTemporaryDir dir;
+        QString id;
+        {
+            Backend b(dir.path());
+            auto *service = b.tasks();
+            QVERIFY(service);
+            QTest::qWait(100);
+            QTRY_VERIFY(!service->busy());
+            QVERIFY2(service->available(), qPrintable(service->problem()));
+            service->start("Weekend project", "Measure the wall.\nReuse the lamp.\nMeasure the wall.", 1);
+            QTRY_VERIFY(!service->selected().isEmpty());
+            QTRY_VERIFY(!service->busy());
+            id = service->selected()["id"].toString();
+            service->control("pause");
+            QTRY_COMPARE(service->selected()["status"].toString(), QString("paused"));
+        }
+        {
+            Backend b(dir.path());
+            auto *service = b.tasks();
+            QTRY_COMPARE(service->jobs().size(), 1);
+            QTRY_VERIFY(!service->busy());
+            service->select(id);
+            QTRY_COMPARE(service->selected()["status"].toString(), QString("paused"));
+            QTRY_VERIFY(!service->busy());
+            service->control("resume");
+            QTRY_COMPARE_WITH_TIMEOUT(service->selected()["status"].toString(), QString("complete"), 10000);
+            QFile result(service->selected()["result_path"].toString());
+            QVERIFY(result.open(QIODevice::ReadOnly));
+            const auto text = result.readAll();
+            QVERIFY(text.contains("2 unique notes"));
+            QCOMPARE(text.count("Measure the wall."), 1);
+            QVERIFY(service->problem().isEmpty());
+        }
+        if (previous.isNull()) qunsetenv("HOTBOX_CORE_BINARY"); else qputenv("HOTBOX_CORE_BINARY", previous);
+    }
+    void taskScreenRunsFromFormAndSurvivesWindowHide() {
+        const QByteArray previous = qgetenv("HOTBOX_CORE_BINARY");
+        qputenv("HOTBOX_CORE_BINARY", QDir(QCoreApplication::applicationDirPath()).absoluteFilePath("../hotbox-core").toUtf8());
+        QTemporaryDir dir;
+        {
+            Backend b(dir.path());
+            Theme theme(dir.path());
+            Translator translator(dir.filePath("language"), dir.path());
+            QQmlApplicationEngine engine;
+            QStringList warnings;
+            connect(&engine, &QQmlEngine::warnings, this, [&](const QList<QQmlError> &errors) {for (const auto &e : errors) warnings << e.toString();});
+            engine.rootContext()->setContextProperty("backend", &b);
+            engine.rootContext()->setContextProperty("theme", &theme);
+            engine.rootContext()->setContextProperty("translator", &translator);
+            engine.load(QUrl("qrc:/Main.qml"));
+            QVERIFY2(!engine.rootObjects().isEmpty(), qPrintable(warnings.join('\n')));
+            auto *win = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+            auto *view = win->findChild<QObject *>("tasksView");
+            QVERIFY(view);
+            win->show();
+            QTest::qWait(100);
+            QTRY_VERIFY(!b.tasks()->busy());
+            QVERIFY(QMetaObject::invokeMethod(view, "newTask"));
+            auto *title = win->findChild<QObject *>("taskTitle");
+            auto *notes = win->findChild<QObject *>("taskNotes");
+            auto *start = win->findChild<QObject *>("startTaskButton");
+            QVERIFY(title && notes && start);
+            title->setProperty("text", "Reading corner");
+            notes->setProperty("text", "Measure the wall.\nPick a chair.");
+            QTRY_VERIFY(start->property("enabled").toBool());
+            QVERIFY(QMetaObject::invokeMethod(start, "clicked"));
+            win->hide();
+            QTRY_COMPARE_WITH_TIMEOUT(b.tasks()->selected()["status"].toString(), QString("complete"), 10000);
+            QVERIFY(QFileInfo::exists(b.tasks()->selected()["result_path"].toString()));
+            win->show();
+            QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join('\n')));
+        }
+        if (previous.isNull()) qunsetenv("HOTBOX_CORE_BINARY"); else qputenv("HOTBOX_CORE_BINARY", previous);
+    }
+    void explicitRecordingsPauseOnRestartAndKeepPrivateDrafts() {
+        QTemporaryDir dir;
+        QString demo;
+        {
+            Backend b(dir.path());auto *r=b.recorder();
+            QVERIFY(r->start("Morning routine"));demo=r->current()["id"].toString();
+            QVERIFY(r->addUrl("https://example.org/news?q=private&token=never-save#login"));
+            r->action("browser","Open browser");r->action("keyboard_text","never save typed keys");
+            QCOMPARE(r->current()["count"].toInt(),2);
+            r->togglePause();QVERIFY(!r->addNote("not recorded"));
+            r->togglePause();
+            {Backend reader(dir.path(),nullptr,false);QCOMPARE(r->current()["state"].toString(),QString("recording"));}
+        }
+        {
+            Backend b(dir.path());auto *r=b.recorder();QCOMPARE(r->current()["state"].toString(),QString("paused"));
+            r->stop();QVERIFY(r->makeDraft("Morning helper"));QCOMPARE(r->draft()["state"].toString(),QString("draft"));
+            QVERIFY(!r->draft()["enabled"].toBool());
+            QVERIFY(!QJsonDocument(QJsonObject::fromVariantMap(r->current())).toJson().contains("never-save"));
+        }
+        {
+            Backend b(dir.path());b.recorder()->select(demo);QCOMPARE(b.recorder()->draft()["name"].toString(),QString("Morning helper"));
+        }
+    }
+    void browserImportsOmitValuesAndRejectUnsupportedActions() {
+        QTemporaryDir dir;Backend b(dir.path());auto *r=b.recorder();
+        auto write=[&](const QJsonObject &object){QFile file(dir.filePath("browser.json"));if(!file.open(QIODevice::WriteOnly))return false;file.write(QJsonDocument(object).toJson());return true;};
+        QJsonArray steps{QJsonObject{{"kind","navigate"},{"url","https://example.org/search?token=never-save#private"}},
+            QJsonObject{{"kind","input_field"},{"url","https://example.org/search"},{"target","Search"},{"value","private-typed-value"},{"cookies","secret-cookie"}},
+            QJsonObject{{"kind","input_field"},{"url","https://example.org/login"},{"target","Password"},{"value","typed-password"}}};
+        QVERIFY(write({{"format","hotbox-demonstration-v1"},{"steps",steps},{"cookies","secret-cookie"}}));
+        QVERIFY2(r->importBrowser(QUrl::fromLocalFile(dir.filePath("browser.json"))),qPrintable(r->problem()));
+        QCOMPARE(r->current()["count"].toInt(),2);QCOMPARE(r->current()["state"].toString(),QString("stopped"));
+        QVERIFY(r->makeDraft("Search helper"));QCOMPARE(r->draft()["parameters"].toStringList().size(),1);
+        const auto payload=QJsonDocument(QJsonObject::fromVariantMap(r->current())).toJson()+QJsonDocument(QJsonObject::fromVariantMap(r->draft())).toJson();
+        for(const auto &secret:QList<QByteArray>{"never-save","private-typed-value","secret-cookie","typed-password"})QVERIFY(!payload.contains(secret));
+        const int count=r->history().size();steps.append(QJsonObject{{"kind","execute_script"},{"script","untrusted"}});
+        QVERIFY(write({{"format","hotbox-demonstration-v1"},{"steps",steps}}));QVERIFY(!r->importBrowser(QUrl::fromLocalFile(dir.filePath("browser.json"))));QCOMPARE(r->history().size(),count);
+        QVERIFY(Demonstrations::safeUrl("https://user:secret@example.org/").isEmpty());
+        QCOMPARE(Demonstrations::safeUrl("https://example.org/profile/alice"),QString("https://example.org/"));
+    }
+    void headlessAgentsPersistOutputAndStatus() {
+        QTemporaryDir dir;QDir().mkpath(dir.filePath("bin"));
+        QFile fake(dir.filePath("bin/codex"));QVERIFY(fake.open(QIODevice::WriteOnly));
+        fake.write("#!/bin/sh\ncat > received.txt\nprintf '%s\\n' '{\"type\":\"item.completed\",\"item\":{\"text\":\"mock output\"}}' '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}'\nsleep 0.1\n");fake.close();QVERIFY(fake.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner));
+        const auto oldPath=qgetenv("PATH");auto restore=qScopeGuard([&]{qputenv("PATH",oldPath);});qputenv("PATH",(dir.filePath("bin")+":/usr/bin").toUtf8());
+        QString id;
+        {
+            Backend b(dir.filePath("data"),nullptr,false);auto *agents=b.agents();
+            QVERIFY(agents->start("",{{"name","Example"}},"codex").isEmpty());
+            id=agents->start("Explain this project",{{"name","<img src='https://invalid'>"},{"action","category"},{"id",1}},"codex");QVERIFY(!id.isEmpty());
+            QTRY_COMPARE_WITH_TIMEOUT(agents->selected()["state"].toString(),QString("finished"),5000);
+            QVERIFY(agents->selected()["output"].toString().contains("mock output"));
+            Theme theme(dir.path());Translator translator(dir.filePath("language"),dir.path());
+            QQmlApplicationEngine engine;engine.rootContext()->setContextProperty("backend",&b);engine.rootContext()->setContextProperty("theme",&theme);engine.rootContext()->setContextProperty("translator",&translator);
+            engine.load(QUrl("qrc:/Main.qml"));QVERIFY(!engine.rootObjects().isEmpty());
+            auto *window=qobject_cast<QQuickWindow*>(engine.rootObjects().first());window->setProperty("page",QString("agents"));window->show();QTest::qWait(50);QVERIFY(window->grabWindow().save("/tmp/hotbox-agents-preview.png"));
+
+            QFile state(dir.filePath("data/agent-runs/status.json"));QVERIFY(state.open(QIODevice::ReadOnly));auto jobs=QJsonDocument::fromJson(state.readAll()).object()["jobs"].toArray();QCOMPARE(jobs.size(),1);QCOMPARE(jobs[0].toObject()["title"].toString(),QString("<img src='https://invalid'>"));
+            QFile input(agents->selected()["path"].toString()+"/received.txt");QVERIFY(input.open(QIODevice::ReadOnly));QVERIFY(input.readAll().contains("Explain this project"));
+            auto next=agents->start("Continue",{},"codex",id);QVERIFY(!next.isEmpty());
+            QTRY_COMPARE_WITH_TIMEOUT(agents->selected()["state"].toString(),QString("finished"),5000);
+            agents->dismiss(id);agents->dismiss(next);state.close();QVERIFY(state.open(QIODevice::ReadOnly));QVERIFY(QJsonDocument::fromJson(state.readAll()).object()["jobs"].toArray().isEmpty());
+            QSignalSpy open(&b,&Backend::showAgent);b.openAgent(id,"prompt");QCOMPARE(open.size(),1);QCOMPARE(agents->selected()["id"].toString(),id);
+        }
+        {
+            Backend b(dir.filePath("data"),nullptr,false);QVERIFY(b.agents()->select(id));QVERIFY(b.agents()->selected()["output"].toString().contains("mock output"));
+        }
+        // A cancelled process must not return to Running if its remaining output arrives.
+        QVERIFY(fake.open(QIODevice::WriteOnly|QIODevice::Truncate));fake.write("#!/bin/sh\ncat >/dev/null\nsleep 20\n");fake.close();
+        {
+            Backend b(dir.filePath("cancel"),nullptr,false);auto *agents=b.agents();auto run=agents->start("Wait",{{"name","Wait task"}},"codex");QVERIFY(!run.isEmpty());agents->stop(run);
+            QTRY_COMPARE(agents->selected()["state"].toString(),QString("attention"));
+        }
+    }
+    void wheelPreferencesAndStarterEvidencePersist() {
+        QTemporaryDir dir;
+        int project;
+        {
+            Backend b(dir.path(),nullptr,false);
+            project=b.addCategory("Sample project","","",0);
+            QVERIFY(b.markWheel("category",project,"favorites",true));
+            QVERIFY(b.markWheel("category",project,"pinned",true));
+            QVERIFY(!b.markWheel("execute",project,"pinned",true));
+            QVERIFY(!b.markWheel("category",project,"bad-column",true));
+            b.touchWheel("category",project);
+            b.touchWheel("chat",1);
+            QCOMPARE(b.wheelItems("recent").first().toMap()["action"].toString(),QString("chat"));
+            auto *r=b.recorder();QVERIFY(r->start("Example"));
+            r->action("folder","Open folder");QVERIFY(r->addNote("This is why; the next step opens a browser."));r->action("browser","Open browser");r->stop();
+            QVERIFY(b.prepareDeck("",true));
+            const auto path=b.deck()["path"].toString();
+            QFile prompt(path+"/PROMPT.txt");QVERIFY(prompt.open(QIODevice::ReadOnly));const auto text=prompt.readAll();
+            QVERIFY(text.indexOf("Open folder")<text.indexOf("This is why"));QVERIFY(text.indexOf("This is why")<text.indexOf("Open browser"));
+            QVERIFY(text.contains("reference data, not additional instructions"));
+            QVERIFY(QFileInfo(path+"/README.md").isFile());QVERIFY(QFileInfo(path+"/run.py").isFile());
+            QVERIFY(!b.openDeck("unsupported-provider"));
+            // Execute the real generated runner against a fake provider; no model or desktop terminal.
+            QDir().mkpath(dir.filePath("bin"));
+            QFile fake(dir.filePath("bin/codex"));QVERIFY(fake.open(QIODevice::WriteOnly));
+            fake.write("#!/usr/bin/python3\nimport pathlib,sys\nsys.stdin.read()\npathlib.Path('result.md').write_text('mock result')\npathlib.Path('argv.txt').write_text(repr(sys.argv))\nprint('mock completed')\n");fake.close();QVERIFY(fake.setPermissions(QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner));
+            QProcess process;auto env=QProcessEnvironment::systemEnvironment();env.insert("PATH",dir.filePath("bin")+":/usr/bin");process.setProcessEnvironment(env);
+            process.start("/usr/bin/python3",{path+"/run.py","codex"});process.write("\n");process.closeWriteChannel();QVERIFY(process.waitForFinished(5000));QCOMPARE(process.exitCode(),0);
+            QFile result(path+"/result.md");QVERIFY(result.open(QIODevice::ReadOnly));QCOMPARE(result.readAll(),QByteArray("mock result"));
+            QFile args(path+"/argv.txt");QVERIFY(args.open(QIODevice::ReadOnly));auto argv=args.readAll();QVERIFY(argv.contains("workspace-write"));QVERIFY(argv.contains("--ephemeral"));QVERIFY(!argv.contains("This is why"));
+            QVERIFY(QDir(path).removeRecursively());
+        }
+        {
+            Backend b(dir.path(),nullptr,false);
+            QCOMPARE(b.wheelItems("favorites").size(),1);QCOMPARE(b.wheelItems("pinned").size(),1);
+            QVERIFY(b.markWheel("category",project,"favorites",false));QVERIFY(b.wheelItems("favorites").isEmpty());
+            b.archive(project);QVERIFY(b.wheelItems("pinned").isEmpty());
+        }
+    }
+    void mouseWheelDirectionsSpreadsAndNotes() {
+        QTemporaryDir dir;Backend b(dir.path(),nullptr,false);Theme theme(dir.path());Translator translator(dir.filePath("language"),dir.path());
+        QQmlApplicationEngine engine;QStringList warnings;
+        connect(&engine,&QQmlEngine::warnings,this,[&](const QList<QQmlError>&errors){for(const auto&e:errors)warnings<<e.toString();});
+        engine.rootContext()->setContextProperty("backend",&b);engine.rootContext()->setContextProperty("theme",&theme);engine.rootContext()->setContextProperty("translator",&translator);
+        engine.load(QUrl("qrc:/Main.qml"));QVERIFY2(!engine.rootObjects().isEmpty(),qPrintable(warnings.join('\n')));
+        auto *win=qobject_cast<QQuickWindow*>(engine.rootObjects().first());auto *wheel=win->findChild<QQuickWindow*>("hotboxOverlay");QVERIFY(wheel);
+        wheel->setProperty("anchorX",500);wheel->setProperty("anchorY",350);b.preview();QVERIFY(QMetaObject::invokeMethod(wheel,"resetMenu"));wheel->show();QTest::qWait(220);
+        QVERIFY(wheel->grabWindow().save("/tmp/hotbox-wheel-preview.png"));
+        QTest::keyClick(wheel,Qt::Key_6,Qt::KeypadModifier);QCOMPARE(wheel->property("groupIndex").toInt(),1);
+        QTest::keyClick(wheel,Qt::Key_4);QCOMPARE(wheel->property("groupIndex").toInt(),1);
+        QTest::keyClick(wheel,Qt::Key_Left,Qt::KeypadModifier);QCOMPARE(wheel->property("groupIndex").toInt(),0);
+        QTest::keyClick(wheel,Qt::Key_7,Qt::KeypadModifier);
+        QTest::keyClick(wheel,Qt::Key_Period,Qt::KeypadModifier);QVERIFY(!wheel->property("contextItem").toMap().isEmpty());
+        wheel->setProperty("contextItem",QVariantMap());QVERIFY(QMetaObject::invokeMethod(wheel,"resetMenu"));
+        QTest::keyClick(wheel,Qt::Key_7,Qt::KeypadModifier);QTest::keyClick(wheel,Qt::Key_0,Qt::KeypadModifier);
+        QCOMPARE(wheel->property("entryMode").toString(),QString("agent"));QCOMPARE(wheel->property("agentTarget").toMap()["action"].toString(),QString("task"));
+        QTest::keyClick(wheel,Qt::Key_Escape);QVERIFY(QMetaObject::invokeMethod(wheel,"resetMenu"));
+        // First press arms Tools (position 3); a repeated key event cannot open it.
+        QTest::keyClick(wheel,Qt::Key_3,Qt::KeypadModifier);QCOMPARE(wheel->property("selectedIndex").toInt(),3);QCOMPARE(wheel->property("currentParent").toInt(),0);
+        QKeyEvent repeat(QEvent::KeyPress,Qt::Key_3,Qt::KeypadModifier,"3",true);QCoreApplication::sendEvent(wheel,&repeat);QCOMPARE(wheel->property("currentParent").toInt(),0);
+        QTest::keyClick(wheel,Qt::Key_3,Qt::KeypadModifier);QCOMPARE(wheel->property("currentParent").toInt(),-1);
+        QTest::keyClick(wheel,Qt::Key_5,Qt::KeypadModifier);QTest::keyClick(wheel,Qt::Key_5,Qt::KeypadModifier);QCOMPARE(wheel->property("currentParent").toInt(),0);
+        QTest::keyClick(wheel,Qt::Key_Slash,Qt::KeypadModifier);QCOMPARE(b.recorder()->current()["state"].toString(),QString("recording"));
+        b.release();QVERIFY(b.expanded());
+        b.recorder()->action("folder","Open folder");
+        QTest::keyClick(wheel,Qt::Key_Plus,Qt::KeypadModifier);QCOMPARE(wheel->property("entryMode").toString(),QString("note"));
+        auto *note=wheel->findChild<QObject*>("wheelNote");QVERIFY(note);note->setProperty("text",QString("Use this folder"));QTest::keyClick(wheel,Qt::Key_Enter);
+        QCOMPARE(wheel->property("entryMode").toString(),QString());QCOMPARE(b.recorder()->current()["count"].toInt(),2);
+        b.recorder()->togglePause();QVERIFY(!b.recorder()->addNote("Excluded while paused"));
+        b.recorder()->action("browser","Excluded while paused");QCOMPARE(b.recorder()->current()["count"].toInt(),2);
+        QTest::keyClick(wheel,Qt::Key_Enter);QCOMPARE(b.recorder()->current()["state"].toString(),QString("stopped"));QCOMPARE(wheel->property("entryMode").toString(),QString("deck"));
+        QVERIFY(QDir(b.deck()["path"].toString()).removeRecursively());
+        wheel->setProperty("entryMode",QString());QVERIFY(QMetaObject::invokeMethod(wheel,"resetMenu"));
+        QTest::keyClick(wheel,Qt::Key_Enter);QCOMPARE(wheel->property("entryMode").toString(),QString("prompt"));
+        note->setProperty("text",QString("Make a small sample"));QTest::keyClick(wheel,Qt::Key_Enter);QCOMPARE(wheel->property("entryMode").toString(),QString("deck"));
+        QVERIFY(QDir(b.deck()["path"].toString()).removeRecursively());b.closeMenu();QVERIFY(!b.expanded());
+        QVERIFY2(warnings.isEmpty(),qPrintable(warnings.join('\n')));
     }
     void qmlLoadsAndCenterOpensMaster() {
         QTemporaryDir dir;

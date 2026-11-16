@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+"""Install Hotbox's user-owned Omarchy task strip, preserving shell layout."""
+import datetime
+import json
+import os
+from pathlib import Path
+import shutil
+import tempfile
+
+root = Path(__file__).resolve().parent.parent
+config_root = Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'omarchy'
+config = config_root / 'shell.json'
+plugin = config_root / 'plugins' / 'tom.hotbox-tasks'
+stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+settings = json.loads(config.read_text())
+entries = settings.setdefault('plugins', [])
+if not isinstance(entries, list):
+    raise SystemExit('The shell plugins setting must be a list.')
+staging = Path(tempfile.mkdtemp(prefix='hotbox-taskbar-', dir=config_root))
+shutil.copytree(root / 'integration' / 'omarchy-tasks', staging / 'plugin',
+                ignore=shutil.ignore_patterns('*.test.cjs'))
+plugin.parent.mkdir(parents=True, exist_ok=True)
+if plugin.exists():
+    backups = config_root / 'backups'
+    backups.mkdir(exist_ok=True)
+    os.replace(plugin, backups / ('hotbox-tasks-' + stamp))
+os.replace(staging / 'plugin', plugin)
+staging.rmdir()
+if not any(entry.get('id') == 'tom.hotbox-tasks' for entry in entries if isinstance(entry, dict)):
+    entries.append({'id': 'tom.hotbox-tasks'})
+shutil.copy2(config, config.with_name('shell.json.backup-' + stamp))
+with tempfile.NamedTemporaryFile('w', dir=config_root, delete=False) as output:
+    json.dump(settings, output, indent=2)
+    output.write('\n')
+    temporary = output.name
+os.chmod(temporary, config.stat().st_mode & 0o777)
+os.replace(temporary, config)
+print('Installed tom.hotbox-tasks. Omarchy will hot-reload it; existing bar layout is preserved.')

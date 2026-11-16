@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "api": "hotbox.tool-menu",
+  "operations": {
+    "tool_menu_register": {"request": ["schema_version", "request_id", "actor", "tool_id", "resource", "name", "purpose", "menu_category", "originating_chat", "initial"]},
+    "tool_menu_update": {"request": ["schema_version", "request_id", "actor", "tool_id", "expected_revision", "name", "purpose", "menu_category"]},
+    "tool_menu_read": {"fields": ["actor", "tool_id"]},
+    "tool_menu_list": {"fields": ["actor", "resource", "after"]}
+  },
+  "actions": [
+    {"id": "edit", "available": true},
+    {"id": "run", "available": false, "reason": "No verified runtime release or execution adapter is registered."}
+  ],
+  "scope": "resource_owner_only",
+  "publication": "draft_metadata_only"
+}

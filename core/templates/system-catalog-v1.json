@@ -1,0 +1,1136 @@
+{
+  "schema_version": 1,
+  "id": "system-catalog-v1",
+  "provisioning": "explicit_lazy",
+  "categories": [
+    {
+      "id": "projects",
+      "title": "Projects",
+      "description": "Project manifests and reusable scaffolds",
+      "definition_path": "catalog/projects",
+      "belongings_path": "libraries/projects",
+      "subdirectories": [
+        "state",
+        "config"
+      ]
+    },
+    {
+      "id": "tools",
+      "title": "Tools",
+      "description": "Tool manifests, versions and lineage",
+      "definition_path": "catalog/tools",
+      "belongings_path": "libraries/tools",
+      "subdirectories": [
+        "instances",
+        "preferences"
+      ]
+    },
+    {
+      "id": "agents",
+      "title": "Agents",
+      "description": "Agent roles, versions and capability requirements",
+      "definition_path": "catalog/agents",
+      "belongings_path": "libraries/agents",
+      "subdirectories": [
+        "sessions",
+        "checkpoints",
+        "memory"
+      ]
+    },
+    {
+      "id": "harnesses",
+      "title": "Harnesses",
+      "description": "Versioned execution and evaluation policies",
+      "definition_path": "catalog/harnesses",
+      "belongings_path": "libraries/harnesses",
+      "subdirectories": [
+        "runs",
+        "evaluations"
+      ]
+    },
+    {
+      "id": "workflows",
+      "title": "Workflows",
+      "description": "Workflow templates and task contracts",
+      "definition_path": "catalog/workflows",
+      "belongings_path": "libraries/workflows",
+      "subdirectories": [
+        "runs",
+        "checkpoints"
+      ]
+    },
+    {
+      "id": "tasks",
+      "title": "Tasks and operations",
+      "description": "Task schemas and operation contracts",
+      "definition_path": "catalog/tasks",
+      "belongings_path": "libraries/tasks",
+      "subdirectories": [
+        "requests",
+        "results"
+      ]
+    },
+    {
+      "id": "sessions",
+      "title": "Chats and terminals",
+      "description": "Session formats and capture policies",
+      "definition_path": "catalog/sessions",
+      "belongings_path": "libraries/sessions",
+      "subdirectories": [
+        "chats",
+        "terminals",
+        "handoffs"
+      ]
+    },
+    {
+      "id": "code",
+      "title": "Code and repositories",
+      "description": "Repository manifests and source layouts",
+      "definition_path": "catalog/code",
+      "belongings_path": "libraries/code",
+      "subdirectories": [
+        "worktrees",
+        "patches",
+        "code-logs"
+      ]
+    },
+    {
+      "id": "environments",
+      "title": "Environments",
+      "description": "Pinned build and runtime specifications",
+      "definition_path": "catalog/environments",
+      "belongings_path": "libraries/environments",
+      "subdirectories": [
+        "instances",
+        "scratch"
+      ]
+    },
+    {
+      "id": "networking",
+      "title": "Networking",
+      "description": "Endpoint and connection policy definitions",
+      "definition_path": "catalog/networking",
+      "belongings_path": "libraries/networking",
+      "subdirectories": [
+        "connections",
+        "dns-observations",
+        "request-metadata"
+      ]
+    },
+    {
+      "id": "monitoring",
+      "title": "Web monitoring",
+      "description": "Watch definitions, diff rules and notification policies",
+      "definition_path": "catalog/monitoring",
+      "belongings_path": "libraries/monitoring",
+      "subdirectories": [
+        "snapshots",
+        "diffs",
+        "checkpoints"
+      ]
+    },
+    {
+      "id": "connectors",
+      "title": "Connectors",
+      "description": "Versioned API, file and database connector definitions",
+      "definition_path": "catalog/connectors",
+      "belongings_path": "libraries/connectors",
+      "subdirectories": [
+        "cursors",
+        "receipts"
+      ]
+    },
+    {
+      "id": "ingestion",
+      "title": "Data ingestion",
+      "description": "Collection, validation and normalization contracts",
+      "definition_path": "catalog/ingestion",
+      "belongings_path": "libraries/ingestion",
+      "subdirectories": [
+        "raw",
+        "quarantine",
+        "receipts",
+        "dead-letter"
+      ]
+    },
+    {
+      "id": "data-engineering",
+      "title": "Data engineering",
+      "description": "Pipeline code, transformations and quality checks",
+      "definition_path": "catalog/data-engineering",
+      "belongings_path": "libraries/data-engineering",
+      "subdirectories": [
+        "staging",
+        "curated",
+        "quality-reports",
+        "backfills"
+      ]
+    },
+    {
+      "id": "datasets",
+      "title": "Datasets",
+      "description": "Dataset contracts and lineage specifications",
+      "definition_path": "catalog/datasets",
+      "belongings_path": "libraries/datasets",
+      "subdirectories": [
+        "versions",
+        "manifests",
+        "exports"
+      ]
+    },
+    {
+      "id": "schemas",
+      "title": "Schemas",
+      "description": "Schemas and explicit compatibility migrations",
+      "definition_path": "catalog/schemas",
+      "belongings_path": "libraries/schemas",
+      "subdirectories": [
+        "validation-reports"
+      ]
+    },
+    {
+      "id": "knowledge",
+      "title": "Knowledge and retrieval",
+      "description": "Chunking, indexing and retrieval policies",
+      "definition_path": "catalog/knowledge",
+      "belongings_path": "libraries/knowledge",
+      "subdirectories": [
+        "artifacts",
+        "chunks",
+        "indexes",
+        "summaries"
+      ]
+    },
+    {
+      "id": "documents",
+      "title": "Documents",
+      "description": "Document and report templates",
+      "definition_path": "catalog/documents",
+      "belongings_path": "libraries/documents",
+      "subdirectories": [
+        "originals",
+        "derived",
+        "exports"
+      ]
+    },
+    {
+      "id": "media",
+      "title": "Media",
+      "description": "Music, sounds, video, pictures and album-cover layout references",
+      "definition_path": "catalog/media",
+      "belongings_path": "media",
+      "subdirectories": [
+        "music",
+        "sounds",
+        "video",
+        "pictures"
+      ]
+    },
+    {
+      "id": "experiments",
+      "title": "Experiments",
+      "description": "Reproducible experiment and benchmark definitions",
+      "definition_path": "catalog/experiments",
+      "belongings_path": "libraries/experiments",
+      "subdirectories": [
+        "runs",
+        "metrics",
+        "comparisons"
+      ]
+    },
+    {
+      "id": "schedules",
+      "title": "Schedules",
+      "description": "Disabled-by-default schedule templates",
+      "definition_path": "catalog/schedules",
+      "belongings_path": "libraries/schedules",
+      "subdirectories": [
+        "occurrences",
+        "checkpoints"
+      ]
+    },
+    {
+      "id": "releases",
+      "title": "Releases",
+      "description": "Build, verification and deployment manifests",
+      "definition_path": "catalog/releases",
+      "belongings_path": "libraries/releases",
+      "subdirectories": [
+        "artifacts",
+        "activations",
+        "rollback"
+      ]
+    },
+    {
+      "id": "observability",
+      "title": "Logs and observability",
+      "description": "Event schemas, redaction and retention policies",
+      "definition_path": "catalog/observability",
+      "belongings_path": "libraries/observability",
+      "subdirectories": [
+        "events",
+        "logs",
+        "traces",
+        "metrics"
+      ]
+    },
+    {
+      "id": "governance",
+      "title": "Identity and governance",
+      "description": "Role, policy and contribution-agreement schemas",
+      "definition_path": "catalog/governance",
+      "belongings_path": "libraries/governance",
+      "subdirectories": [
+        "registry",
+        "approvals",
+        "audit"
+      ]
+    },
+    {
+      "id": "backups",
+      "title": "Backup and recovery",
+      "description": "Backup, restore and retention plans",
+      "definition_path": "catalog/backups",
+      "belongings_path": "libraries/backups",
+      "subdirectories": [
+        "manifests",
+        "snapshots",
+        "restore-checks"
+      ]
+    }
+  ],
+  "lifecycles": {
+    "definition": {
+      "states": [
+        "draft",
+        "active",
+        "deprecated",
+        "archived"
+      ],
+      "initial": "draft",
+      "terminal": [
+        "archived"
+      ],
+      "transitions": [
+        [
+          "draft",
+          "active"
+        ],
+        [
+          "draft",
+          "archived"
+        ],
+        [
+          "active",
+          "deprecated"
+        ],
+        [
+          "deprecated",
+          "archived"
+        ]
+      ]
+    },
+    "execution": {
+      "states": [
+        "pending",
+        "ready",
+        "running",
+        "waiting",
+        "succeeded",
+        "failed",
+        "cancelled",
+        "expired"
+      ],
+      "initial": "pending",
+      "terminal": [
+        "succeeded",
+        "failed",
+        "cancelled",
+        "expired"
+      ],
+      "transitions": [
+        [
+          "pending",
+          "ready"
+        ],
+        [
+          "pending",
+          "cancelled"
+        ],
+        [
+          "pending",
+          "expired"
+        ],
+        [
+          "ready",
+          "running"
+        ],
+        [
+          "ready",
+          "cancelled"
+        ],
+        [
+          "ready",
+          "expired"
+        ],
+        [
+          "running",
+          "waiting"
+        ],
+        [
+          "waiting",
+          "ready"
+        ],
+        [
+          "waiting",
+          "failed"
+        ],
+        [
+          "waiting",
+          "cancelled"
+        ],
+        [
+          "waiting",
+          "expired"
+        ],
+        [
+          "running",
+          "succeeded"
+        ],
+        [
+          "running",
+          "failed"
+        ],
+        [
+          "running",
+          "cancelled"
+        ],
+        [
+          "running",
+          "expired"
+        ]
+      ]
+    },
+    "session": {
+      "states": [
+        "created",
+        "active",
+        "disconnected",
+        "closed",
+        "expired"
+      ],
+      "initial": "created",
+      "terminal": [
+        "closed",
+        "expired"
+      ],
+      "transitions": [
+        [
+          "created",
+          "active"
+        ],
+        [
+          "created",
+          "closed"
+        ],
+        [
+          "created",
+          "expired"
+        ],
+        [
+          "active",
+          "disconnected"
+        ],
+        [
+          "disconnected",
+          "active"
+        ],
+        [
+          "active",
+          "closed"
+        ],
+        [
+          "disconnected",
+          "closed"
+        ],
+        [
+          "active",
+          "expired"
+        ],
+        [
+          "disconnected",
+          "expired"
+        ]
+      ]
+    },
+    "artifact": {
+      "states": [
+        "registered",
+        "available",
+        "quarantined",
+        "retired"
+      ],
+      "initial": "registered",
+      "terminal": [
+        "retired"
+      ],
+      "transitions": [
+        [
+          "registered",
+          "available"
+        ],
+        [
+          "registered",
+          "quarantined"
+        ],
+        [
+          "registered",
+          "retired"
+        ],
+        [
+          "available",
+          "quarantined"
+        ],
+        [
+          "quarantined",
+          "available"
+        ],
+        [
+          "available",
+          "retired"
+        ],
+        [
+          "quarantined",
+          "retired"
+        ]
+      ]
+    },
+    "approval": {
+      "states": [
+        "pending",
+        "approved",
+        "rejected",
+        "revoked",
+        "expired"
+      ],
+      "initial": "pending",
+      "terminal": [
+        "rejected",
+        "revoked",
+        "expired"
+      ],
+      "transitions": [
+        [
+          "pending",
+          "approved"
+        ],
+        [
+          "pending",
+          "rejected"
+        ],
+        [
+          "pending",
+          "expired"
+        ],
+        [
+          "approved",
+          "revoked"
+        ],
+        [
+          "approved",
+          "expired"
+        ]
+      ]
+    },
+    "grant": {
+      "states": [
+        "active",
+        "revoked",
+        "expired"
+      ],
+      "initial": "active",
+      "terminal": [
+        "revoked",
+        "expired"
+      ],
+      "transitions": [
+        [
+          "active",
+          "revoked"
+        ],
+        [
+          "active",
+          "expired"
+        ]
+      ]
+    },
+    "attempt": {
+      "states": [
+        "pending",
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled",
+        "expired"
+      ],
+      "initial": "pending",
+      "terminal": [
+        "succeeded",
+        "failed",
+        "cancelled",
+        "expired"
+      ],
+      "transitions": [
+        [
+          "pending",
+          "running"
+        ],
+        [
+          "pending",
+          "cancelled"
+        ],
+        [
+          "pending",
+          "expired"
+        ],
+        [
+          "running",
+          "succeeded"
+        ],
+        [
+          "running",
+          "failed"
+        ],
+        [
+          "running",
+          "cancelled"
+        ],
+        [
+          "running",
+          "expired"
+        ]
+      ]
+    }
+  },
+  "entity_kinds": [
+    {
+      "id": "installation",
+      "prefix": "ins",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "principal",
+      "prefix": "prn",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "group",
+      "prefix": "grp",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "device",
+      "prefix": "dev",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "workspace",
+      "prefix": "wsp",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "project",
+      "prefix": "prj",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "tool",
+      "prefix": "tol",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "tool_version",
+      "prefix": "tver",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "architecture",
+      "prefix": "arc",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "plan",
+      "prefix": "pln",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "plan_revision",
+      "prefix": "prev",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "approval",
+      "prefix": "apr",
+      "lifecycle": "approval"
+    },
+    {
+      "id": "agent",
+      "prefix": "agt",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "agent_version",
+      "prefix": "aver",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "harness",
+      "prefix": "hrn",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "harness_version",
+      "prefix": "hver",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "workflow",
+      "prefix": "wfl",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "repository",
+      "prefix": "rep",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "branch",
+      "prefix": "brn",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "environment",
+      "prefix": "env",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "connector",
+      "prefix": "con",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "source",
+      "prefix": "src",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "monitor",
+      "prefix": "mon",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "schedule",
+      "prefix": "sch",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "pipeline",
+      "prefix": "pip",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "dataset",
+      "prefix": "dat",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "schema",
+      "prefix": "scm",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "grant",
+      "prefix": "grt",
+      "lifecycle": "grant"
+    },
+    {
+      "id": "binding",
+      "prefix": "bnd",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "endpoint",
+      "prefix": "end",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "experiment",
+      "prefix": "exp",
+      "lifecycle": "definition"
+    },
+    {
+      "id": "workflow_run",
+      "prefix": "wrun",
+      "lifecycle": "execution"
+    },
+    {
+      "id": "task",
+      "prefix": "tsk",
+      "lifecycle": "execution"
+    },
+    {
+      "id": "operation",
+      "prefix": "op",
+      "lifecycle": "execution"
+    },
+    {
+      "id": "attempt",
+      "prefix": "atm",
+      "lifecycle": "attempt"
+    },
+    {
+      "id": "runtime_instance",
+      "prefix": "rti",
+      "lifecycle": "execution"
+    },
+    {
+      "id": "ingestion_run",
+      "prefix": "ing",
+      "lifecycle": "execution"
+    },
+    {
+      "id": "pipeline_run",
+      "prefix": "prun",
+      "lifecycle": "execution"
+    },
+    {
+      "id": "schedule_occurrence",
+      "prefix": "occ",
+      "lifecycle": "execution"
+    },
+    {
+      "id": "trace",
+      "prefix": "trc",
+      "lifecycle": "execution"
+    },
+    {
+      "id": "session",
+      "prefix": "ses",
+      "lifecycle": "session"
+    },
+    {
+      "id": "terminal_session",
+      "prefix": "term",
+      "lifecycle": "session"
+    },
+    {
+      "id": "connection",
+      "prefix": "cnn",
+      "lifecycle": "session"
+    },
+    {
+      "id": "commit",
+      "prefix": "cmt",
+      "lifecycle": "artifact"
+    },
+    {
+      "id": "release",
+      "prefix": "rel",
+      "lifecycle": "artifact"
+    },
+    {
+      "id": "dataset_version",
+      "prefix": "dver",
+      "lifecycle": "artifact"
+    },
+    {
+      "id": "artifact",
+      "prefix": "art",
+      "lifecycle": "artifact"
+    },
+    {
+      "id": "event",
+      "prefix": "evt",
+      "lifecycle": "artifact"
+    },
+    {
+      "id": "decision",
+      "prefix": "dec",
+      "lifecycle": "artifact"
+    },
+    {
+      "id": "checkpoint",
+      "prefix": "chk",
+      "lifecycle": "artifact"
+    }
+  ],
+  "relations": [
+    {
+      "id": "contains",
+      "graph": "containment",
+      "sources": [
+        "installation",
+        "workspace",
+        "project"
+      ],
+      "targets": [
+        "workspace",
+        "project",
+        "tool",
+        "agent",
+        "harness",
+        "workflow",
+        "repository",
+        "monitor",
+        "pipeline",
+        "dataset",
+        "session"
+      ],
+      "acyclic": true
+    },
+    {
+      "id": "depends_on",
+      "graph": "execution",
+      "sources": [
+        "task",
+        "operation"
+      ],
+      "targets": [
+        "task",
+        "operation"
+      ],
+      "acyclic": true
+    },
+    {
+      "id": "version_of",
+      "graph": "provenance",
+      "sources": [
+        "tool_version",
+        "agent_version",
+        "harness_version",
+        "dataset_version",
+        "plan_revision"
+      ],
+      "targets": [
+        "tool",
+        "agent",
+        "harness",
+        "dataset",
+        "plan"
+      ],
+      "acyclic": true
+    },
+    {
+      "id": "forked_from",
+      "graph": "provenance",
+      "sources": [
+        "tool",
+        "agent",
+        "harness",
+        "workflow",
+        "dataset"
+      ],
+      "targets": [
+        "tool_version",
+        "agent_version",
+        "harness_version",
+        "workflow",
+        "dataset_version"
+      ],
+      "acyclic": true
+    },
+    {
+      "id": "branched_from",
+      "graph": "provenance",
+      "sources": [
+        "branch"
+      ],
+      "targets": [
+        "commit"
+      ],
+      "acyclic": true
+    },
+    {
+      "id": "cloned_from",
+      "graph": "provenance",
+      "sources": [
+        "repository"
+      ],
+      "targets": [
+        "repository"
+      ],
+      "acyclic": true
+    },
+    {
+      "id": "instantiated_from",
+      "graph": "provenance",
+      "sources": [
+        "runtime_instance"
+      ],
+      "targets": [
+        "release"
+      ],
+      "acyclic": true
+    },
+    {
+      "id": "runs_with",
+      "graph": "association",
+      "sources": [
+        "workflow_run",
+        "operation"
+      ],
+      "targets": [
+        "agent_version",
+        "harness_version",
+        "environment"
+      ],
+      "acyclic": false
+    },
+    {
+      "id": "executes",
+      "graph": "association",
+      "sources": [
+        "workflow_run",
+        "pipeline_run",
+        "ingestion_run"
+      ],
+      "targets": [
+        "workflow",
+        "pipeline",
+        "connector"
+      ],
+      "acyclic": false
+    },
+    {
+      "id": "attempt_of",
+      "graph": "provenance",
+      "sources": [
+        "attempt"
+      ],
+      "targets": [
+        "operation"
+      ],
+      "acyclic": true
+    },
+    {
+      "id": "produced",
+      "graph": "provenance",
+      "sources": [
+        "operation",
+        "attempt",
+        "pipeline_run",
+        "ingestion_run"
+      ],
+      "targets": [
+        "artifact",
+        "dataset_version",
+        "checkpoint",
+        "release",
+        "decision",
+        "event"
+      ],
+      "acyclic": true
+    },
+    {
+      "id": "derived_from",
+      "graph": "provenance",
+      "sources": [
+        "artifact",
+        "dataset_version"
+      ],
+      "targets": [
+        "artifact",
+        "dataset_version"
+      ],
+      "acyclic": true
+    },
+    {
+      "id": "observed",
+      "graph": "association",
+      "sources": [
+        "monitor",
+        "ingestion_run"
+      ],
+      "targets": [
+        "source",
+        "endpoint"
+      ],
+      "acyclic": false
+    },
+    {
+      "id": "connects_to",
+      "graph": "connectivity",
+      "sources": [
+        "connection",
+        "endpoint"
+      ],
+      "targets": [
+        "endpoint"
+      ],
+      "acyclic": false
+    },
+    {
+      "id": "uses_binding",
+      "graph": "association",
+      "sources": [
+        "runtime_instance",
+        "operation"
+      ],
+      "targets": [
+        "binding"
+      ],
+      "acyclic": false
+    },
+    {
+      "id": "captured_in",
+      "graph": "association",
+      "sources": [
+        "operation",
+        "attempt"
+      ],
+      "targets": [
+        "session",
+        "terminal_session"
+      ],
+      "acyclic": false
+    },
+    {
+      "id": "scheduled_by",
+      "graph": "association",
+      "sources": [
+        "schedule_occurrence"
+      ],
+      "targets": [
+        "schedule"
+      ],
+      "acyclic": false
+    },
+    {
+      "id": "triggered",
+      "graph": "association",
+      "sources": [
+        "schedule_occurrence",
+        "event"
+      ],
+      "targets": [
+        "workflow_run",
+        "ingestion_run",
+        "pipeline_run"
+      ],
+      "acyclic": false
+    },
+    {
+      "id": "governed_by",
+      "graph": "association",
+      "sources": [
+        "workflow_run",
+        "operation"
+      ],
+      "targets": [
+        "plan_revision",
+        "approval"
+      ],
+      "acyclic": false
+    }
+  ]
+}

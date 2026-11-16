@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Check the normalized provider-receipt contract and generated reference."""
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import subprocess
+import tempfile
+
+ROOT=Path(__file__).resolve().parent.parent
+SOURCE=ROOT/'src/provider-receipt-v1.json'
+REFERENCE=ROOT/'core/docs/PROVIDER_RECEIPTS_REFERENCE.md'
+
+
+def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--write',action='store_true')
+    parser.add_argument('--binary',type=Path)
+    args=parser.parse_args()
+    raw=SOURCE.read_bytes();data=json.loads(raw)
+    if data['schema_version']!=1 or data['contract_id']!='hotbox.provider-receipt.v1':raise ValueError('Unsupported provider contract')
+    for name,profile in data['providers'].items():
+        if profile['input_mode'] not in ('includes_cache','separate_cache_buckets'):raise ValueError('Unknown input semantics: '+name)
+        if not profile['terminal_type'] or not profile['output_args']:raise ValueError('Missing structured provider mode: '+name)
+    for section in ('implementation','verification'):
+        for ref in data[section]:
+            path=(ROOT/ref['path']).resolve()
+            if not path.is_relative_to(ROOT) or not path.is_file() or ref['symbol'] not in path.read_text():raise ValueError('Missing provider reference: '+ref['path']+': '+ref['symbol'])
+    lines=['# Provider receipts reference (generated)','',
+        'Generated from [provider-receipt-v1.json](../../src/provider-receipt-v1.json) with `bin/check-provider-contracts --write`. See the [behavior and delivery boundary](PROVIDER_RECEIPTS.md).','',
+        f"Contract: `{data['contract_id']}`. SHA-256: `{hashlib.sha256(raw).hexdigest()}`.",'',
+        '| Provider | Structured flags | Terminal type | Input accounting | Cache fields |',
+        '| --- | --- | --- | --- | --- |']
+    for name,profile in sorted(data['providers'].items()):lines.append('| '+name+' | `'+ ' '.join(profile['output_args'])+'` | `'+profile['terminal_type']+'` | `'+profile['input_mode']+'` | '+', '.join('`'+f+'`' for f in profile['cache_fields'])+' |')
+    lines+=['','Usage states: '+', '.join('`'+v+'`' for v in data['usage_states'])+'.','',
+        'Outcomes: '+', '.join('`'+v+'`' for v in data['outcomes'])+'.','',
+        'Limits: '+', '.join(f"{k} = {v}" for k,v in data['limits'].items())+'.','',
+        '| Receipt field | Meaning |','| --- | --- |']
+    for field,meaning in data['fields'].items():lines.append(f'| `{field}` | {meaning} |')
+    for section in ('implementation','verification'):
+        lines+=['','## '+section.title(),'']
+        for ref in data[section]:lines.append(f"- [{ref['path']}](../../{ref['path']}): `{ref['symbol']}`.")
+    lines+=['','## Provider references','']
+    for index,url in enumerate(data['sources'],1):lines.append(f'- [Provider source {index}]({url}).')
+    expected='\n'.join(lines)+'\n'
+    if args.write:REFERENCE.write_text(expected)
+    if not REFERENCE.exists() or REFERENCE.read_text()!=expected:raise ValueError('Provider reference is stale; run bin/check-provider-contracts --write')
+    if args.binary:
+        with tempfile.TemporaryDirectory(prefix='hotbox-provider-contract-') as tmp:
+            result=subprocess.run([str(args.binary.resolve()),'provider-schema','--data-dir',str(Path(tmp)/'data')],text=True,capture_output=True,timeout=20)
+            if result.returncode:raise ValueError('Provider discovery failed: '+(result.stderr or result.stdout)[:300])
+            observed=json.loads(result.stdout)
+            if not observed.pop('ok',False):raise ValueError('Provider discovery rejected')
+            if observed.pop('adapter_revision',None)!=hashlib.sha256(raw).hexdigest() or observed!=data:raise ValueError('Compiled provider contract differs; rebuild the app')
+    print('Provider contract passed: source, generated reference'+(', compiled catalog' if args.binary else '')+'.')
+
+
+if __name__=='__main__':
+    try:main()
+    except (OSError,ValueError,KeyError,subprocess.SubprocessError) as error:raise SystemExit(str(error))

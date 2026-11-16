@@ -29,6 +29,31 @@ ScrollView {
   Label {text:qsTr("Build from a shared template. Keep application source in the development Git tree and personal files in a separate belongings tree. Attach existing storage across projects without copying it.");wrapMode:Text.Wrap;Layout.fillWidth:true;color:"#aeb9c9"}
   Label {text:qsTr("Storage foundation · container execution is not configured");color:"#f1d99b";wrapMode:Text.Wrap;Layout.fillWidth:true}
   GroupBox {
+  id:loopReview;visible:backend.currentId===1;title:qsTr("Master loop and improvement");Layout.fillWidth:true
+  property var report:backend.optimizerReport()
+  onVisibleChanged:if(visible)report=backend.optimizerReport()
+  ColumnLayout {anchors.fill:parent
+   Label {text:qsTr("%1 runs · %2 need attention · usage missing for %3").arg(loopReview.report.runs||0).arg(loopReview.report.attention||0).arg(loopReview.report.usageUnknown||0);Layout.fillWidth:true;wrapMode:Text.Wrap}
+   Label {text:qsTr("Reported tokens: %1 input / %2 output").arg(loopReview.report.reportedInputTokens||0).arg(loopReview.report.reportedOutputTokens||0);Layout.fillWidth:true;wrapMode:Text.Wrap;color:"#aeb9c9"}
+   Repeater {model:loopReview.report.proposals||[]
+    delegate:Label {required property var modelData;Layout.fillWidth:true;wrapMode:Text.Wrap;textFormat:Text.PlainText;text:modelData.summary}
+   }
+   Button {text:qsTr("Review recorded runs");onClicked:loopReview.report=backend.optimizerReport()}
+   Label {text:qsTr("Suggestions do not change the master tree. Unknown usage is not zero; completed processes still need result verification.");Layout.fillWidth:true;wrapMode:Text.Wrap;color:"#9198a6"}
+  }
+ }
+ GroupBox {
+  title:qsTr("Runtime and data locations");Layout.fillWidth:true
+  ColumnLayout {anchors.fill:parent
+   property var report:{var registry=root.registry;return backend.runtimeReport()}
+   Label {text:parent.report.databaseOk?qsTr("Private database check passed"):qsTr("Private database needs attention");Layout.fillWidth:true;wrapMode:Text.Wrap}
+   Repeater {model:parent.report.storage||[]
+    delegate:Label {required property var modelData;Layout.fillWidth:true;wrapMode:Text.Wrap;textFormat:Text.PlainText;text:modelData.name+"\n"+modelData.path;color:"#aeb9c9"}
+   }
+   Label {text:qsTr("Agent terminals show output. Interactive terminal attachment is not connected.");Layout.fillWidth:true;wrapMode:Text.Wrap;color:"#9198a6"}
+  }
+ }
+ GroupBox {
    title:root.registry.initialized?qsTr("Architecture roots"):qsTr("Initialize architecture from master chat")
    Layout.fillWidth:true
    ColumnLayout {

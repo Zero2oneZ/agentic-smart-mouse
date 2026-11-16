@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "master-loop-v2",
+  "max_parallel_runs": 3,
+  "max_wall_ms": 900000,
+  "max_output_bytes": 8388608,
+  "max_followup_depth": 8,
+  "parent_input_token_budget": 128000,
+  "parent_output_token_budget": 32000,
+  "optimization": "advisory_only",
+  "completion": "requires_verifier_evidence",
+  "wake": "durable_state_change",
+  "unknown_usage": "never_assume_zero",
+  "unknown_usage_followup": "block"
+}

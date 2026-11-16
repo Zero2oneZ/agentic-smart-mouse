@@ -30,3 +30,8 @@ for _, key in ipairs({ "Control_L", "Control_R", "Super_L", "Super_R" }) do
     release = true, transparent = true, ignore_mods = true, non_consuming = true,
   })
 end
+
+-- A focused keypad panel; ordinary numpad keys are never bound globally.
+hl.bind("SUPER + KP_Add", function()
+  hl.exec_cmd("hotbox keypad")
+end, { description = "Hotbox keyboard controls" })

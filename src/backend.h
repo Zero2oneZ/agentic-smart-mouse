@@ -1,7 +1,11 @@
 #pragma once
 #include "architecturestore.h"
+#include "buildledger.h"
+#include "agentservice.h"
 #include "segmentstore.h"
 #include "sessionledger.h"
+#include "taskservice.h"
+#include "demonstrations.h"
 #include <QFutureWatcher>
 #include <QJsonArray>
 #include <QNetworkAccessManager>
@@ -10,12 +14,24 @@
 #include <QPointer>
 #include <QProcess>
 #include <QSqlDatabase>
+#include <QSet>
 #include <QTimer>
 #include <QVariantList>
 #include <memory>
 
 class Backend : public QObject {
     Q_OBJECT
+    Q_PROPERTY(QVariantMap feedIdentity READ feedIdentity NOTIFY changed)
+    Q_PROPERTY(QVariantList registeredTools READ registeredTools NOTIFY toolsChanged)
+    Q_PROPERTY(bool toolRegistryReady READ toolRegistryReady NOTIFY toolsChanged)
+    Q_PROPERTY(bool toolRegistryBusy READ toolRegistryBusy NOTIFY toolsChanged)
+    Q_PROPERTY(QString toolRegistryProblem READ toolRegistryProblem NOTIFY toolsChanged)
+    Q_PROPERTY(AgentService *agents READ agents CONSTANT)
+    Q_PROPERTY(QVariantMap deck READ deck NOTIFY deckChanged)
+    Q_PROPERTY(Demonstrations *recorder READ recorder CONSTANT)
+    Q_PROPERTY(QVariantList keypadControls READ keypadControls CONSTANT)
+    Q_PROPERTY(int quickIndex READ quickIndex WRITE setQuickIndex NOTIFY quickChanged)
+    Q_PROPERTY(TaskService *tasks READ tasks CONSTANT)
     Q_PROPERTY(QVariantList categories READ categories NOTIFY changed)
     Q_PROPERTY(QVariantMap architecture READ architecture NOTIFY activityChanged)
     Q_PROPERTY(QVariantList messages READ messages NOTIFY changed)
@@ -36,8 +52,43 @@ class Backend : public QObject {
     Q_PROPERTY(QString model READ model NOTIFY settingsChanged)
     Q_PROPERTY(QString keyVariable READ keyVariable NOTIFY settingsChanged)
   public:
-    explicit Backend(const QString &directory = {}, QObject *parent = nullptr);
+    explicit Backend(const QString &directory = {}, QObject *parent = nullptr, bool automaticTasks = true);
     ~Backend() override;
+    QVariantList registeredTools() const;
+    bool toolRegistryReady() const { return m_toolReady; }
+    bool toolRegistryBusy() const { return m_toolProcess.state() != QProcess::NotRunning; }
+    QString toolRegistryProblem() const { return m_toolProblem; }
+    Q_INVOKABLE void refreshToolRegistry();
+    Q_INVOKABLE void retryToolRegistry();
+    Q_INVOKABLE QVariantMap registerToolDraft(const QVariantMap &arguments);
+    Q_INVOKABLE QVariantMap updateToolDraft(const QVariantMap &arguments);
+    Q_INVOKABLE void openToolContext(const QString &tool);
+    Q_INVOKABLE bool markToolWheel(const QString &tool, const QString &group, bool enabled);
+    Q_INVOKABLE void touchToolWheel(const QString &tool);
+    Q_INVOKABLE QVariantList activityPage(qint64 before=0) const;
+    Q_INVOKABLE QVariantMap activityDetail(qint64 id,int offset=0) const;
+    Q_INVOKABLE QVariantMap agentReceipt(const QString &id, int scope = 0) const;
+    Q_INVOKABLE QVariantMap buildAction(const QString &operation,const QVariantMap &arguments);
+    Q_INVOKABLE QVariantMap runtimeReport() const;
+    Q_INVOKABLE QVariantMap optimizerReport(int scope=0) const;
+    QVariantMap feedIdentity() const;
+    Q_INVOKABLE QVariantMap identifyFeed(int category,const QStringList &path,const QString &spread,const QString &action,bool remember=false);
+    AgentService *agents() const { return m_agents.get(); }
+    Q_INVOKABLE void openAgent(const QString &id, const QString &view);
+    QVariantMap deck() const { return m_deck; }
+    Q_INVOKABLE QVariantList wheelItems(const QString &group) const;
+    Q_INVOKABLE bool markWheel(const QString &action, int category, const QString &group, bool enabled);
+    Q_INVOKABLE void touchWheel(const QString &action, int category);
+    Q_INVOKABLE bool prepareDeck(const QString &prompt, bool includeRecording);
+    Q_INVOKABLE bool openDeck(const QString &provider = QString());
+    Q_INVOKABLE void latchMenu() { m_menuLatched = true; }
+    Q_INVOKABLE void closeMenu() { m_menuLatched = false; release(); }
+    Demonstrations *recorder() const { return m_recorder.get(); }
+    QVariantList keypadControls() const;
+    int quickIndex() const;
+    Q_INVOKABLE void setQuickIndex(int index);
+    Q_INVOKABLE void launchQuickTask();
+    TaskService *tasks() const { return m_tasks.get(); }
     QVariantList categories() const;
     QVariantMap architecture() const;
     Q_INVOKABLE QVariantMap architectureAction(const QString &action,
@@ -99,6 +150,9 @@ class Backend : public QObject {
     QVariantMap contextTool(const QString &name, const QVariantMap &arguments, int scope = 0);
 
   signals:
+    void toolsChanged();
+    void showAgent(const QString &view);
+    void deckChanged();
     void changed();
     void activityChanged();
     void statusChanged();
@@ -109,9 +163,27 @@ class Backend : public QObject {
     void showMenu();
     void showChat();
     void showBindings();
+    void quickChanged();
+    void showKeypad();
+    void showTasks(const QString &view);
     void createRequested(int parent);
 
   private:
+    void initToolRegistry(bool automatic);
+    void advanceToolRegistry();
+    void requestToolCore(const QString &stage, const QVariantMap &request = {});
+    void finishToolCore(int code);
+    bool projectToolEntry(const QVariantMap &entry);
+    QVariantMap boundTool(const QString &tool) const;
+    QProcess m_toolProcess;
+    QTimer m_toolTimeout;
+    QByteArray m_toolOutput;
+    QString m_toolStage, m_toolProblem, m_toolRequest, m_toolOpen;
+    int m_toolOpenScope = 0;
+    bool m_toolReady = false, m_toolScanning = false;
+    QStringList m_toolScan;
+    QVariantMap m_toolMutation;
+    QSet<QString> m_verifiedTools;
     QString field(int id, const QString &name) const;
     QString setting(const QString &name, const QString &fallback) const;
     bool execute(const QString &sql, const QVariantList &args = {}) const;
@@ -122,6 +194,10 @@ class Backend : public QObject {
     void collectTools(const QJsonObject &delta);
     QJsonArray toolDefinitions() const;
     void gitTask(const QString &operation, int category);
+    std::unique_ptr<BuildLedger> m_build;
+    std::unique_ptr<AgentService> m_agents;
+    std::unique_ptr<Demonstrations> m_recorder;
+    std::unique_ptr<TaskService> m_tasks;
     std::unique_ptr<SessionLedger> m_ledger;
     std::unique_ptr<ArchitectureStore> m_architecture;
     std::unique_ptr<SegmentStore> m_segments;
@@ -140,6 +216,8 @@ class Backend : public QObject {
     bool m_cancelled = false;
 
     QSqlDatabase m_db;
+    QVariantMap m_deck;
+    bool m_menuLatched = false;
     QString m_connection, m_directory, m_status;
     int m_current = 1, m_replyCategory = 1, m_replyMessage = 0;
     QTimer m_hold;

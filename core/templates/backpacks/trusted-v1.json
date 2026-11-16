@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "id": "trusted-backpack",
+  "version": "1.0.0",
+  "architecture_ref": "system-catalog-v1",
+  "harness_ref": "trusted-harness-v1",
+  "agent_ref": null,
+  "zone": "trusted",
+  "abilities": [
+    "read_artifact",
+    "transform_data",
+    "write_artifact"
+  ],
+  "artifacts": {
+    "image": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "seccomp": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "storage": [
+    {
+      "binding_ref": "pipeline-code",
+      "role": "code_read"
+    },
+    {
+      "binding_ref": "admitted-inputs",
+      "role": "trusted_read"
+    },
+    {
+      "binding_ref": "curated-output",
+      "role": "trusted_write"
+    },
+    {
+      "binding_ref": "scratch",
+      "role": "scratch"
+    }
+  ],
+  "network": {
+    "mode": "deny",
+    "endpoint_refs": []
+  },
+  "limits": {
+    "cpu_millis": 1000,
+    "memory_mib": 512,
+    "pids": 64,
+    "wall_seconds": 120,
+    "scratch_mib": 256,
+    "output_bytes": 1048576
+  }
+}

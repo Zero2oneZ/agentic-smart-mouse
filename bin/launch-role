@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+"""Launch a project cloud role with the shared model catalog and private key."""
+import argparse
+import json
+import os
+from pathlib import Path
+import shlex
+import shutil
+import sys
+import socket
+from project_runtime import ROOT, cloud_key, environment
+
+catalog = json.loads((ROOT / 'core/templates/ollama-role-models-v1.json').read_text())
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('role', choices=sorted(catalog['roles']))
+parser.add_argument('--dry-run', action='store_true')
+parser.add_argument('--via', choices=('direct', 'ollama'), default='direct')
+parser.add_argument('--supervised', action='store_true', help='Submit to the running Hotbox controller and its output terminals')
+parser.add_argument('--prompt', help='Task for a supervised run')
+parser.add_argument('--category', type=int, default=1, help='Hotbox workspace ID for a supervised run')
+# Only arguments after -- are passed to Claude.
+cli = sys.argv[1:]
+separator = cli.index('--') if '--' in cli else len(cli)
+args = parser.parse_args(cli[:separator])
+extra = cli[separator + 1:]
+env = environment()
+role = catalog['roles'][args.role]
+if args.supervised:
+    if not args.prompt or args.category <= 0 or extra or args.via != 'direct':
+        parser.error('--supervised requires --prompt, a positive --category, and no Claude passthrough arguments')
+    request = {'operation': 'cloud-role.start', 'role': args.role, 'category': args.category, 'prompt': args.prompt}
+    packet = json.dumps(request).encode() + b'\n'
+    if len(args.prompt) > 4000 or len(packet) > 16384:
+        parser.error('The supervised prompt exceeds the 4,000-character or 16 KiB request limit')
+    if args.dry_run:
+        print(json.dumps(request))
+        raise SystemExit(0)
+    runtime = env.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')
+    try:
+        with socket.socket(socket.AF_UNIX) as connection:
+            connection.settimeout(5)
+            connection.connect(str(Path(runtime) / 'hotbox-ipc'))
+            connection.sendall(packet)
+            with connection.makefile('rb') as stream:
+                response = json.loads(stream.readline(16385))
+    except (OSError, ValueError) as error:
+        raise SystemExit(f'Hotbox controller is unavailable: {error}')
+    print(json.dumps(response))
+    raise SystemExit(0 if response.get('ok') else 1)
+if args.via == 'ollama':
+    binary = ROOT / '.tools/ollama/bin/ollama'
+    command = [str(binary), 'launch', 'claude', '--model', role['model']]
+    if extra:
+        command += ['--'] + extra
+else:
+    command = ['claude', '--model', role['direct_api_model']] + extra
+if args.dry_run:
+    print(shlex.join(command))
+    print('Role:', args.role, '| transport:', args.via, '| credentials: private environment/file (never printed)')
+    raise SystemExit(0)
+if not shutil.which('claude', path=env['PATH']):
+    raise SystemExit('Claude Code is missing from PATH.')
+if args.via == 'ollama':
+    if not binary.is_file():
+        raise SystemExit('Project Ollama is not installed. Run bin/install-ollama, or use the default direct cloud route.')
+else:
+    key = cloud_key()
+    if not key:
+        raise SystemExit('OLLAMA_API_KEY is missing; check the private Hotbox secrets.env permissions.')
+    model = role['direct_api_model']
+    env.update(ANTHROPIC_BASE_URL='https://ollama.com', ANTHROPIC_AUTH_TOKEN=key, ANTHROPIC_API_KEY='')
+    for tier in ('HAIKU', 'SONNET', 'OPUS'):
+        env[f'ANTHROPIC_DEFAULT_{tier}_MODEL'] = model
+os.execvpe(command[0], command, env)

@@ -1,0 +1,18 @@
+# Supply reviewed, digest-pinned rust:<version>-bookworm and debian:bookworm-slim
+# references through scripts/package_image.py. There are no mutable default images.
+ARG BUILDER_IMAGE
+ARG RUNTIME_IMAGE
+FROM ${BUILDER_IMAGE} AS build
+WORKDIR /src
+COPY Cargo.toml Cargo.lock ./
+COPY src/ ./src/
+COPY templates/ ./templates/
+RUN cargo build --release --locked
+
+FROM ${RUNTIME_IMAGE}
+COPY --from=build /src/target/release/hotbox-core /usr/local/bin/hotbox-core
+RUN install -d -o 65532 -g 65532 /data
+USER 65532:65532
+WORKDIR /data
+ENTRYPOINT ["/usr/local/bin/hotbox-core"]
+CMD ["catalog"]

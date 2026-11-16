@@ -16,3 +16,30 @@ SOURCES += src/segmentstore.cpp
 
 HEADERS += src/architecturestore.h
 SOURCES += src/architecturestore.cpp
+
+HEADERS += src/taskservice.h
+SOURCES += src/taskservice.cpp
+
+HEADERS += src/demonstrations.h
+SOURCES += src/demonstrations.cpp
+
+SOURCES += src/wheel.cpp
+
+HEADERS += src/agentservice.h
+SOURCES += src/agentservice.cpp
+
+SOURCES += src/feedidentity.cpp
+
+SOURCES += src/activityfeed.cpp
+
+SOURCES += src/runtime.cpp
+
+SOURCES += src/loopoptimizer.cpp
+
+HEADERS += src/buildledger.h
+SOURCES += src/buildledger.cpp
+
+HEADERS += src/providerreceipts.h
+HEADERS += src/modelcredentials.h
+SOURCES += src/providerreceipts.cpp
+SOURCES += src/toolregistry.cpp

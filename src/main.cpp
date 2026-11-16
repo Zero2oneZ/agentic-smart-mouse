@@ -1,4 +1,6 @@
 #include "backend.h"
+#include "providerreceipts.h"
+#include "gitworkspace.h"
 #include "theme.h"
 #include "translator.h"
 #include <QCursor>
@@ -22,6 +24,9 @@
 #include <QStandardPaths>
 #include <QTextStream>
 #include <QTimer>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <Window>
 
 static QJsonDocument hypr(const QString &command) {
@@ -43,10 +48,22 @@ int main(int argc, char **argv) {
     }();
     const bool check = raw.contains("check"), smoke = raw.contains("--smoke");
     const QString commandName = raw.value(0, "open");
+    QString agentCommand;
+    if(commandName=="agent-ui" && raw.size()>=3 && QRegularExpression("^[a-f0-9]{32}$").match(raw[1]).hasMatch() && QStringList{"chat","terminal","prompt"}.contains(raw[2]))
+        agentCommand="agent-ui:"+raw[1]+":"+raw[2];
+    if(QStringList{"hold","release","quit"}.contains(commandName)) {
+        QCoreApplication control(argc,argv);
+        QCoreApplication::setApplicationName("hotbox");
+        QLocalSocket socket;socket.connectToServer(QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation)+"/hotbox-ipc");
+        if(!socket.waitForConnected(300)) {QTextStream(stderr)<<"Hotbox is not reachable: "<<socket.errorString()<<'\n';return 1;}
+        socket.write(commandName.toUtf8()+"\n");
+        if(!socket.waitForBytesWritten(1000))return 1;
+        return 0;
+    }
     const bool headless = QStringList{"events",   "read-event", "attach", "record",     "focus",
                                       "snapshot", "branch",     "sync",   "git-config", "run"}
                               .contains(commandName) ||
-                          commandName == "segment" || commandName == "architecture";
+                          commandName == "provider-schema" || commandName == "agent-receipt" || commandName == "build" || commandName == "optimize" || commandName == "doctor" || commandName == "segment" || commandName == "architecture";
     if (check || smoke || headless) {
         qputenv("QT_QPA_PLATFORM", "offscreen");
         qputenv("QT_QPA_PLATFORMTHEME", "");
@@ -55,7 +72,7 @@ int main(int argc, char **argv) {
         qputenv("QT_QUICK_BACKEND", "software");
     QGuiApplication app(argc, argv);
     app.setApplicationName("hotbox");
-    app.setApplicationVersion("0.4.0");
+    app.setApplicationVersion("0.6.0");
     app.setDesktopFileName("hotbox");
     app.setQuitOnLastWindowClosed(false);
     app.setWindowIcon(QIcon::fromTheme("hotbox"));
@@ -80,7 +97,7 @@ int main(int argc, char **argv) {
     if (!smoke && !check && !headless) {
         client.connectToServer(serverPath);
         if (client.waitForConnected(150)) {
-            client.write(command.toUtf8() + "\n");
+            client.write((agentCommand.isEmpty()?command:agentCommand).toUtf8() + "\n");
             client.waitForBytesWritten(500);
             return 0;
         }
@@ -89,7 +106,7 @@ int main(int argc, char **argv) {
             return 1;
         }
     }
-    Backend backend(dataDir);
+    Backend backend(dataDir, nullptr, !headless && !check);
     if (headless) {
         bool valid = false;
         int category = option("--category", "1").toInt(&valid);
@@ -104,7 +121,28 @@ int main(int argc, char **argv) {
         }
         QJsonObject result;
         int exitCode = 0;
-        if (command == "architecture") {
+        if(command=="provider-schema") {result=QJsonObject::fromVariantMap(ProviderReceipts::catalog());result["ok"]=true;result["adapter_revision"]=ProviderReceipts::revision();}
+        else if(command=="agent-receipt")result=QJsonObject::fromVariantMap(backend.agentReceipt(option("--id")));
+        else if(command=="build") {
+            QFile request(option("--request-file"));
+            if(!request.open(QIODevice::ReadOnly)||request.size()>128000){QTextStream(stderr)<<"Build requests require --request-file with a JSON object under 128 KB\n";return 2;}
+            QJsonParseError parse;auto body=QJsonDocument::fromJson(request.readAll(),&parse);
+            if(parse.error!=QJsonParseError::NoError||!body.isObject()){QTextStream(stderr)<<"Invalid build request JSON\n";return 2;}
+            QString action;
+            for (int i = 1; i < options.size(); ++i) {
+                if (options[i].startsWith("--")) {
+                    if (options[i] != "--json") ++i;
+                    continue;
+                }
+                action = options[i];
+                break;
+            }
+            result=QJsonObject::fromVariantMap(backend.buildAction(action,body.object().toVariantMap()));
+        } else if(command=="optimize") {
+            result=QJsonObject::fromVariantMap(backend.optimizerReport());
+        } else if(command=="doctor") {
+            result=QJsonObject::fromVariantMap(backend.runtimeReport());
+        } else if (command == "architecture") {
             QString action = "catalog";
             for (int i = 1; i < options.size(); ++i) {
                 if (options[i].startsWith("--")) {
@@ -235,7 +273,21 @@ int main(int argc, char **argv) {
                 QTextStream(stderr) << "Link an existing workspace directory first\n";
                 return 2;
             }
+            QVariantMap buildContext;
+            const auto buildRoad=option("--build"),buildStep=option("--step");
+            if(!buildStep.isEmpty()&&buildRoad.isEmpty()){QTextStream(stderr)<<"--step requires --build\n";return 2;}
+            if(!buildRoad.isEmpty()){
+                auto road=backend.buildAction("read",{{"schema_version",1},{"roadmap",buildRoad}});
+                if(road["workspace"].toInt()!=category){QTextStream(stderr)<<"The command workspace must match the roadmap workspace\n";return 2;}
+                if(!road["ok"].toBool()){QTextStream(stderr)<<road["error"].toString()<<'\n';return 2;}
+                buildContext={{"roadmap",buildRoad},{"node",buildStep},{"revision",road["revision"]}};
+                for(auto value:road["contracts"].toList())if(value.toMap()["node"].toString()==buildStep){buildContext["contract"]=value.toMap()["id"];buildContext["contract_digest"]=value.toMap()["digest"];break;}
+                if(!buildStep.isEmpty()){bool found=false;for(auto value:road["nodes"].toList())if(value.toMap()["id"].toString()==buildStep)found=true;if(!found){QTextStream(stderr)<<"Step is outside this roadmap\n";return 2;}}
+            }
+            const auto gitBefore=GitWorkspace::snapshot(path);
             qint64 started = backend.recordEvent(category, "command.started", description, description, path);
+            auto linkBuild=[&](qint64 event,bool initial=false){if(buildRoad.isEmpty())return true;auto road=backend.buildAction("read",{{"schema_version",1},{"roadmap",buildRoad}});auto linked=backend.buildAction("link",{{"schema_version",1},{"request_id",QUuid::createUuid().toString(QUuid::Id128)},{"roadmap",buildRoad},{"node",buildStep},{"expected_revision",initial?buildContext["revision"]:road["revision"]},{"kind","terminal_command"},{"ref",QString::number(event)}});return linked["ok"].toBool();};
+            if(!linkBuild(started,true)){QTextStream(stderr)<<"Could not bind terminal command to build step; command was not launched\n";return 1;}
             QProcess process;
             process.setWorkingDirectory(path);
             process.setProcessChannelMode(QProcess::MergedChannels);
@@ -266,7 +318,7 @@ int main(int argc, char **argv) {
             }
             output += process.readAll();
             output = output.left(240000);
-            QJsonObject detail{{"command", description},
+            QJsonObject detail{{"buildContext",QJsonObject::fromVariantMap(buildContext)},{"terminalSession",QString("terminal:%1").arg(started)},{"gitBefore",QJsonObject::fromVariantMap(gitBefore)},{"gitAfter",QJsonObject::fromVariantMap(GitWorkspace::snapshot(path))},{"build",buildRoad},{"step",buildStep},{"command", description},
                                {"cwd", path},
                                {"output", SessionLedger::redact(QString::fromUtf8(output))},
                                {"exitCode", exitCode},
@@ -280,7 +332,10 @@ int main(int argc, char **argv) {
             auto event = backend.recordEvent(category, "command.finished",
                                              description + QString(" · exit %1").arg(exitCode),
                                              QString::fromUtf8(QJsonDocument(detail).toJson()), path);
-            result = {{"event", double(event)}, {"exitCode", exitCode}};
+            const bool linked=linkBuild(event);
+            result = {{"event", double(event)}, {"exitCode", exitCode},{"buildLinked",linked},{"terminalSession",QString("terminal:%1").arg(started)}};
+            if(linked&&!buildRoad.isEmpty()&&exitCode!=0){auto road=backend.buildAction("read",{{"schema_version",1},{"roadmap",buildRoad}});auto issue=backend.buildAction("node.add",{{"schema_version",1},{"request_id",QString("command-failure:%1").arg(event)},{"roadmap",buildRoad},{"expected_revision",road["revision"]},{"parent",buildStep},{"kind","issue"},{"title",QString("Command failed: exit %1").arg(exitCode)},{"body",QString("Recorded terminal session terminal:%1; result event #%2. Inspect output and observed Git state before retrying.").arg(started).arg(event)}});result["buildIssueRecorded"]=issue["ok"].toBool();if(issue["ok"].toBool())result["buildIssue"]=issue["node"].toString();}
+            if(!linked){result["error"]="Command finished, but the build link needs reconciliation. Do not rerun the command automatically.";exitCode=1;}
         } else {
             if (command == "snapshot")
                 backend.captureGit();
@@ -338,6 +393,45 @@ int main(int argc, char **argv) {
     engine.load(QUrl("qrc:/Main.qml"));
     if (engine.rootObjects().isEmpty())
         return 1;
+    if (!smoke) {
+        // Probe asynchronously so startup never waits for the model service.
+        auto *network = new QNetworkAccessManager(&app);
+        const QString host = qEnvironmentVariable("OLLAMA_HOST", "http://127.0.0.1:11434");
+        QUrl endpoint(host.contains("://") ? host : "http://" + host);
+        endpoint.setPath("/api/version");
+        QNetworkRequest request(endpoint);
+        request.setTransferTimeout(1500);
+        auto *reply = network->get(request);
+        QObject::connect(reply, &QNetworkReply::finished, &app, [reply, endpoint] {
+            const bool available = reply->error() == QNetworkReply::NoError;
+            reply->deleteLater();
+            if (available) return;
+            // Remote endpoints are managed by their owner.
+            if (!QStringList{"127.0.0.1", "localhost", "::1"}.contains(endpoint.host())) return;
+            QString binary;
+            for (const auto &candidate : QStringList{
+                     QCoreApplication::applicationDirPath() + "/../.tools/ollama/bin/ollama",
+                     QCoreApplication::applicationDirPath() + "/../lib/hotbox/ollama",
+                     QStandardPaths::findExecutable("ollama")}) {
+                if (QFileInfo(candidate).isExecutable() && QFileInfo(candidate).isFile()) {
+                    binary = candidate;
+                    break;
+                }
+            }
+            if (binary.isEmpty()) {
+                qWarning("Ollama startup: executable not found");
+                return;
+            }
+            const auto logs = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+            QDir().mkpath(logs);
+            QProcess service;
+            service.setProgram(binary);
+            service.setArguments({"serve"});
+            service.setStandardOutputFile(logs + "/ollama.log", QIODevice::Append);
+            service.setStandardErrorFile(logs + "/ollama.log", QIODevice::Append);
+            if (!service.startDetached()) qWarning("Ollama startup failed; see ollama.log");
+        });
+    }
     auto mainWindow = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
     auto menu = mainWindow->findChild<QQuickWindow *>("hotboxOverlay");
     if (!menu)
@@ -381,8 +475,10 @@ int main(int argc, char **argv) {
             screen = app.primaryScreen();
         if (!screen)
             return;
-        if (layer)
+        if (layer) {
             layer->setScreen(screen);
+            layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
+        }
         menu->setScreen(screen);
         QRect geometry = screen->geometry();
         menu->setGeometry(geometry);
@@ -390,9 +486,17 @@ int main(int argc, char **argv) {
         menu->setProperty("anchorY", qBound(12, pos.y() - geometry.y(), geometry.height() - 12));
         QMetaObject::invokeMethod(menu, "resetMenu");
         menu->show();
+        menu->requestActivate();
+    });
+    QObject::connect(&backend, &Backend::expandedChanged, &app, [&] {
+        if (layer && !backend.expanded())
+            layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
     });
     auto handle = [&](const QString &cmd) {
-        if (cmd == "hold")
+        if(cmd.startsWith("agent-ui:")) {
+            auto parts=cmd.split(':');
+            if(parts.size()==3 && QRegularExpression("^[a-f0-9]{32}$").match(parts[1]).hasMatch())backend.openAgent(parts[1],parts[2]);
+        } else if (cmd == "hold")
             backend.hold();
         else if (cmd == "release")
             backend.release();
@@ -401,19 +505,46 @@ int main(int argc, char **argv) {
         else if (cmd == "quit") {
             mainWindow->setProperty("allowClose", true);
             app.quit();
-        } else if (cmd == "keybindings")
+        } else if (cmd == "keypad")
+            backend.launch("keypad");
+        else if (cmd == "keybindings")
             backend.launch("keybindings");
         else if (cmd == "open")
-            backend.openChat();
+            backend.launch("activity");
     };
     QObject::connect(&server, &QLocalServer::newConnection, &app, [&] {
         while (server.hasPendingConnections()) {
             auto *socket = server.nextPendingConnection();
             socket->setParent(&server);
+            socket->setReadBufferSize(16385);
             QObject::connect(socket, &QLocalSocket::readyRead, socket, [&, socket] {
+                if (socket->bytesAvailable() > 16384) {
+                    socket->disconnectFromServer();
+                    return;
+                }
                 if (socket->canReadLine()) {
                     QString cmd = QString::fromUtf8(socket->readLine()).trimmed();
-                    handle(cmd);
+                    if (cmd.startsWith('{')) {
+                        auto request = QJsonDocument::fromJson(cmd.toUtf8()).object();
+                        QJsonObject response{{"ok", false}, {"error", "Invalid cloud role request"}};
+                        if (request["operation"].toString() == "cloud-role.start") {
+                            const auto role = request["role"].toString();
+                            const int category = request["category"].toInt();
+                            QString name;
+                            for (const auto &value : backend.categories()) {
+                                const auto item = value.toMap();
+                                if (item["id"].toInt() == category) name = item["name"].toString();
+                            }
+                            if (!name.isEmpty() && QStringList{"builder", "vision"}.contains(role)) {
+                                const auto id = backend.agents()->start(request["prompt"].toString(),
+                                    {{"name", name}, {"id", category}, {"modelRole", role}}, "claude");
+                                response = QJsonObject{{"ok", !id.isEmpty()}, {"run", id}};
+                                if (id.isEmpty()) response["error"] = backend.agents()->problem();
+                            }
+                        }
+                        socket->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + '\n');
+                        socket->flush();
+                    } else handle(cmd);
                     socket->disconnectFromServer();
                 }
             });
@@ -477,6 +608,15 @@ int main(int argc, char **argv) {
             backend.clearStatus();
             mainWindow->setProperty("page", "architecture");
         });
+        QTimer::singleShot(2800, &app, [&] {
+            backend.tasks()->start("Weekend project", "Choose a quiet reading corner.\nMeasure the wall for shelves.\nReuse the small lamp.\nMeasure the wall for shelves.", 1);
+            mainWindow->setProperty("page", "tasks");
+        });
+        QTimer::singleShot(6500, &app, [&, output] {
+            mainWindow->grabWindow().save(output + "/tasks.png");
+            mainWindow->setProperty("allowClose", true);
+            app.quit();
+        });
         QTimer::singleShot(2600, &app, [&, output] {
             mainWindow->grabWindow().save(output + "/architecture.png");
             QJsonObject result{{"ok", true},
@@ -484,10 +624,8 @@ int main(int argc, char **argv) {
                                {"chat", QFile::exists(output + "/chat.png")},
                                {"hotbox", QFile::exists(output + "/hotbox.png")}};
             QTextStream(stdout) << QJsonDocument(result).toJson(QJsonDocument::Compact) << '\n';
-            mainWindow->setProperty("allowClose", true);
-            app.quit();
         });
     } else if (command != "daemon")
-        QTimer::singleShot(0, &app, [&] { handle(command); });
+        QTimer::singleShot(0, &app, [&] { handle(agentCommand.isEmpty()?command:agentCommand); });
     return app.exec();
 }

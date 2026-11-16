@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "id": "simulation-backpack",
+  "version": "1.0.0",
+  "architecture_ref": "system-catalog-v1",
+  "harness_ref": "simulation-harness-v1",
+  "agent_ref": null,
+  "zone": "simulation",
+  "abilities": [
+    "observe_fixture",
+    "read_artifact",
+    "validate_schema"
+  ],
+  "artifacts": {
+    "fixture": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "storage": [
+    {
+      "binding_ref": "code-fixture",
+      "role": "code_read"
+    },
+    {
+      "binding_ref": "scratch",
+      "role": "scratch"
+    }
+  ],
+  "network": {
+    "mode": "deny",
+    "endpoint_refs": []
+  },
+  "limits": {
+    "cpu_millis": 1000,
+    "memory_mib": 512,
+    "pids": 64,
+    "wall_seconds": 120,
+    "scratch_mib": 256,
+    "output_bytes": 1048576
+  }
+}

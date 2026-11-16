@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "id": "hotbox.ollama-review.v1",
+  "state": "awaiting_connection_and_models",
+  "enabled": false,
+  "purpose": "One supervised parallel review pass; proposals are reconciled by the primary assistant.",
+  "dispatch": "manual_review_only",
+  "controller": "primary_assistant",
+  "execution_authority": "unchanged_existing_rust_contracts",
+  "connection": {
+    "endpoint": null,
+    "key_environment_variable": "OLLAMA_API_KEY",
+    "model_assignments": {}
+  },
+  "limits": {
+    "max_parallel_reviewers": 3,
+    "calls_per_reviewer": 1,
+    "recursive_delegation": false,
+    "automatic_retry": false,
+    "unknown_usage": "stop_and_review"
+  },
+  "context": {
+    "source": "explicit_repository_files_at_a_recorded_revision",
+    "personal_data": false,
+    "raw_chat_history": false,
+    "runtime_logs": false,
+    "secrets": false
+  },
+  "reviewers": [
+    {
+      "id": "contracts",
+      "model": null,
+      "objective": "Compare the canonical build/provider contracts with implementation and generated references. Identify concrete drift or missing validation.",
+      "references": ["docs/CONTRACT_AUDIT.md", "src/build-ledger-api-v1.json", "src/buildledger.cpp", "src/provider-receipt-v1.json", "src/providerreceipts.cpp"],
+      "output": "Findings with file/symbol references, observed behavior, expected contract and a bounded proposed change. Separate observations from assumptions."
+    },
+    {
+      "id": "data-runtime",
+      "model": null,
+      "objective": "Review SQL ownership, immutable provenance, workspace scoping, process capture, recovery and receipt accounting boundaries.",
+      "references": ["src/build-ledger-v1.sql", "src/build-ledger-v2.sql", "src/agentservice.cpp", "src/loopoptimizer.cpp", "core/docs/PROVIDER_RECEIPTS.md"],
+      "output": "Concrete data/lifecycle risks with reproduction conditions and source references. Do not claim OS isolation or general leased dispatch exists."
+    },
+    {
+      "id": "tests-failures",
+      "model": null,
+      "objective": "Challenge current verification: find uncovered failures, misleading success signals and regression cases for the two normalized interfaces.",
+      "references": ["tests/hotbox_tests.cpp", "tests/cli_smoke.py", "tests/contract_reference_smoke.py", "bin/check-contracts", "bin/check-provider-contracts", "docs/BUILD_PASS_2026-11-15.md"],
+      "output": "A short prioritized list of meaningful missing checks, including triggers, expected outcomes and why existing tests do not cover them."
+    }
+  ],
+  "handoff": {
+    "findings_are": "untrusted_review_proposals",
+    "integration": "primary assistant reviews, applies bounded changes, runs checks and records evidence in the rolling ledger",
+    "functionality_acceptance": "independent_acceptance_bridge_still_required",
+    "no_majority_vote_acceptance": true
+  }
+}

@@ -1,4 +1,5 @@
 #include "backend.h"
+#include "modelcredentials.h"
 #include "gitworkspace.h"
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -17,7 +18,7 @@
 #include <QUuid>
 #include <QtConcurrent>
 
-Backend::Backend(const QString &directory, QObject *parent) : QObject(parent) {
+Backend::Backend(const QString &directory, QObject *parent, bool automaticTasks) : QObject(parent) {
     m_directory =
         directory.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) : directory;
     QDir().mkpath(m_directory);
@@ -45,7 +46,26 @@ Backend::Backend(const QString &directory, QObject *parent) : QObject(parent) {
         "CREATE TABLE IF NOT EXISTS workspace_git(category INTEGER PRIMARY KEY REFERENCES categories(id), "
         "folder TEXT NOT NULL, branch TEXT NOT NULL, paths TEXT NOT NULL DEFAULT '', remote TEXT NOT NULL "
         "DEFAULT '', automatic INTEGER NOT NULL DEFAULT 0, push INTEGER NOT NULL DEFAULT 0)");
+    execute("CREATE TABLE IF NOT EXISTS wheel_items(action TEXT NOT NULL,category INTEGER NOT NULL,"
+            "favorite INTEGER NOT NULL DEFAULT 0,pinned INTEGER NOT NULL DEFAULT 0,used INTEGER NOT NULL DEFAULT 0,"
+            "PRIMARY KEY(action,category))");
+    execute("CREATE TABLE IF NOT EXISTS feed_origins(category INTEGER PRIMARY KEY REFERENCES categories(id),document TEXT NOT NULL)");
+    execute("CREATE TABLE IF NOT EXISTS message_origins(message INTEGER PRIMARY KEY REFERENCES messages(id),document TEXT NOT NULL)");
+    execute("CREATE TABLE IF NOT EXISTS event_origins(event INTEGER PRIMARY KEY REFERENCES events(id),document TEXT NOT NULL)");
+    m_agents = std::make_unique<AgentService>(m_db,m_directory,automaticTasks);
+    m_recorder = std::make_unique<Demonstrations>(m_db, automaticTasks);
+    m_tasks = std::make_unique<TaskService>(m_directory, automaticTasks);
+    connect(m_tasks.get(), &TaskService::demonstrated, this, [this](const QString &code, const QString &label){ if(m_recorder)m_recorder->action(code,label); });
     m_ledger = std::make_unique<SessionLedger>(m_db);
+    m_build = std::make_unique<BuildLedger>(m_db,*m_ledger,m_directory);
+    m_agents->setBuildContext([this](const QString &road,const QString &node,int scope){return m_build->call(scope,"guide",{{"schema_version",1},{"roadmap",road},{"node",node}});});
+    m_agents->setBuildBinder([this](const QString &road,const QString &node,const QString &run,int category,qint64 revision){
+        auto existing=m_build->call(category,"read",{{"schema_version",1},{"roadmap",road}});
+        if(!existing["ok"].toBool()||existing["workspace"].toInt()!=category)return false;
+        return m_build->call(category,"link",{{"schema_version",1},{"request_id","agent:"+run},{"roadmap",road},{"node",node},{"expected_revision",revision},{"kind","agent_run"},{"ref",run}})["ok"].toBool();
+    });
+    connect(m_agents.get(),&AgentService::capturedEvent,this,[this](int category,const QString &kind,const QString &summary,const QString &content,const QString &source){recordEvent(category>0?category:1,kind,summary,content,source);});
+    connect(m_tasks.get(),&TaskService::demonstrated,this,[this](const QString &,const QString &label){recordEvent(m_current,"task.requested",label,label,"local task");});
     m_architecture = std::make_unique<ArchitectureStore>(m_db, *m_ledger, m_directory);
     m_segments = std::make_unique<SegmentStore>(m_db, *m_ledger);
     m_segmentPoll.setInterval(5000);
@@ -139,8 +159,15 @@ Backend::Backend(const QString &directory, QObject *parent) : QObject(parent) {
                     m_bindings.append(line.trimmed());
                 emit bindingsChanged();
             });
+    initToolRegistry(automaticTasks);
 }
 Backend::~Backend() {
+    m_toolProcess.disconnect(this);
+    m_toolTimeout.stop();
+    if (toolRegistryBusy()) {
+        m_toolProcess.kill();
+        m_toolProcess.waitForFinished(1000);
+    }
     if (m_reply) {
         m_reply->disconnect(this);
         m_reply->abort();
@@ -153,6 +180,10 @@ Backend::~Backend() {
     m_activityPoll.stop();
     m_gitTask.waitForFinished();
     m_segmentPoll.stop();
+    m_agents.reset();
+    m_build.reset();
+    m_recorder.reset();
+    m_tasks.reset();
     m_segments.reset();
     m_architecture.reset();
     m_ledger.reset();
@@ -214,12 +245,12 @@ QVariantList Backend::children(int parent) const {
 QVariantList Backend::messages() const {
     QVariantList list;
     QSqlQuery q(m_db);
-    q.prepare("SELECT id,role,content,created FROM messages WHERE category=? ORDER BY id");
+    q.prepare("SELECT m.id,m.role,m.content,m.created,o.document FROM messages m LEFT JOIN message_origins o ON o.message=m.id WHERE m.category=? ORDER BY m.id");
     q.addBindValue(m_current);
     q.exec();
     while (q.next())
         list.append(QVariantMap{
-            {"id", q.value(0)}, {"role", q.value(1)}, {"content", q.value(2)}, {"created", q.value(3)}});
+            {"id", q.value(0)}, {"role", q.value(1)}, {"content", q.value(2)}, {"created", q.value(3)}, {"origin",QJsonDocument::fromJson(q.value(4).toByteArray()).object().toVariantMap()}});
     return list;
 }
 void Backend::select(int id) {
@@ -327,6 +358,7 @@ int Backend::append(int category, const QString &role, const QString &content) {
         return 0;
     }
     int message = q.lastInsertId().toInt();
+    QSqlQuery origin(m_db);origin.prepare("INSERT INTO message_origins(message,document) SELECT ?,document FROM feed_origins WHERE category=?");origin.addBindValue(message);origin.addBindValue(category);origin.exec();
     if (!content.isEmpty())
         recordEvent(category, "chat." + role, content.left(160), content,
                     "message:" + QString::number(message));
@@ -381,11 +413,12 @@ void Backend::startReply() {
             return;
         }
     }
+    recordEvent(m_replyCategory,"context.loaded",tr("Loaded model request context"),QString::fromUtf8(QJsonDocument(m_context).toJson()),"model request");
     QNetworkRequest request{QUrl(endpoint())};
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setTransferTimeout(120000);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
-    const QByteArray token = qgetenv(keyVariable().toUtf8().constData());
+    const QByteArray token = modelCredential(m_directory, keyVariable());
     if (!token.isEmpty())
         request.setRawHeader("Authorization", "Bearer " + token);
     m_answer.clear();
@@ -429,12 +462,14 @@ void Backend::startReply() {
                 auto function = call["function"].toObject();
                 QJsonParseError parseError;
                 auto parsed = QJsonDocument::fromJson(function["arguments"].toString().toUtf8(), &parseError);
+                recordEvent(m_replyCategory,"tool.before",tr("Before tool: %1").arg(function["name"].toString()),function["arguments"].toString(),call["id"].toString());
                 QVariantMap result;
                 if (parseError.error != QJsonParseError::NoError || !parsed.isObject())
                     result = {{"error", "Invalid tool arguments"}};
                 else
                     result = contextTool(function["name"].toString(), parsed.object().toVariantMap(),
                                          m_replyCategory);
+                recordEvent(m_replyCategory,"tool.result",tr("Tool result: %1").arg(function["name"].toString()),QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(result)).toJson()),call["id"].toString());
                 m_context.append(QJsonObject{
                     {"role", "tool"},
                     {"tool_call_id", call["id"]},
@@ -532,10 +567,19 @@ void Backend::refreshBindings() {
     m_bindingProcess.start("omarchy", {"menu", "keybindings", "--print"});
 }
 void Backend::launch(const QString &action, int id) {
-    release();
+    closeMenu();
     if (id < 0)
         id = m_current;
-    if (action == "folder") {
+    if (action != "keypad") touchWheel(action, id);
+    if (m_recorder && action != "keypad") {
+        const QMap<QString,QString> labels{{"folder",tr("Open project folder")},{"browser",tr("Open browser")},{"terminal",tr("Open project terminal")},{"chat",tr("Open chat")},{"task",tr("Open a new local task")},{"activity",tr("Open Activity")},{"keybindings",tr("Open shortcuts")}};
+        m_recorder->action(action, labels.value(action,action));
+    }
+    if (action == "keypad") {
+        preview();
+    } else if (action == "task" || action == "activity") {
+        emit showTasks(action);
+    } else if (action == "folder") {
         QString path = field(id, "folder");
         if (path.isEmpty())
             path = QDir::homePath() + "/Work";
@@ -581,6 +625,7 @@ void Backend::hold() {
     m_hold.start();
 }
 void Backend::release() {
+    if (m_menuLatched) return;
     m_held = false;
     m_hold.stop();
     if (m_expanded) {
@@ -596,7 +641,8 @@ void Backend::preview() {
     emit showMenu();
 }
 void Backend::openChat(int id) {
-    release();
+    closeMenu();
+    touchWheel("chat", id);
     select(id);
     emit showChat();
 }
@@ -613,6 +659,7 @@ qint64 Backend::recordEvent(int category, const QString &kind, const QString &su
     if (!m_ledger || field(category, "name").isEmpty())
         return 0;
     auto id = m_ledger->record(category, kind, summary, content, source);
+    if(id){QSqlQuery origin(m_db);origin.prepare("INSERT INTO event_origins(event,document) SELECT ?,document FROM feed_origins WHERE category=?");origin.addBindValue(id);origin.addBindValue(category);origin.exec();}
     emit activityChanged();
     return id;
 }
@@ -845,6 +892,12 @@ QJsonArray Backend::toolDefinitions() const {
     };
     QJsonObject integer{{"type", "integer"}}, text{{"type", "string"}};
     return {
+        make("read_agent_receipt","Read scoped immutable provider/process usage evidence. Does not certify functionality or billing.",{{"run",text}},{"run"}),
+        make("read_build_contract","Read a scoped immutable acceptance contract version. Read-only reference data.",{{"roadmap",text},{"contract",text}},{"roadmap","contract"}),
+        make("read_build_guidance","Read bounded rolling-ledger reference context: proposals, contracts, blockers and unverified check evidence. Does not grant dispatch or acceptance.",{{"roadmap",text},{"node",text}},{"roadmap"}),
+        make("read_build_roadmap","Read scoped build roadmap metadata and evidence references. Read-only; no execution transitions.",{{"roadmap",text}},{"roadmap"}),
+        make("read_build_document","Read one page of a scoped immutable build document version.",{{"roadmap",text},{"version",text},{"offset",integer}},{"roadmap","version","offset"}),
+        make("inspect_master_loop","Read aggregate master-loop evidence and optimization proposals. Master scope only. No source changes or execution.",{},{}),
         make(
             "read_architecture",
             "Read registered storage templates and this scope's existing project bindings; no file contents.",
@@ -885,6 +938,20 @@ QJsonArray Backend::toolDefinitions() const {
 QVariantMap Backend::contextTool(const QString &name, const QVariantMap &a, int scope) {
     if (scope == 0)
         scope = m_current;
+    if(name=="read_agent_receipt")return agentReceipt(a.value("run").toString(),scope);
+    if(name=="read_build_contract")return m_build->call(scope,"contract.read",{{"schema_version",1},{"roadmap",a.value("roadmap")},{"contract",a.value("contract")}});
+    if(name=="read_build_guidance")return m_build->call(scope,"guide",{{"schema_version",1},{"roadmap",a.value("roadmap")},{"node",a.value("node",QString(""))}});
+    if(name=="read_build_roadmap"){
+        auto result=m_build->call(scope,"read",{{"schema_version",1},{"roadmap",a.value("roadmap")}});
+        for(const auto &key:{"nodes","documents","contracts","links","checkpoints","changes"}) {
+            auto rows=result.value(key).toList();result[QString(key)+"Count"]=rows.size();rows=rows.mid(0,12);
+            if(QString(key)=="contracts")for(auto &row:rows){auto full=row.toMap();QVariantMap ref;for(const auto &field:{"id","node","parent_contract","digest","created"})ref[field]=full[field];row=ref;}
+            result[key]=rows;
+        }
+        return result;
+    }
+    if(name=="read_build_document")return m_build->call(scope,"document.read",{{"schema_version",1},{"roadmap",a.value("roadmap")},{"version",a.value("version")},{"offset",a.value("offset",0)}});
+    if(name=="inspect_master_loop")return optimizerReport(scope);
     if (name == "read_architecture") {
         auto result = m_architecture->catalog(scope);
         // Keep the model index bounded. The full registry is available through the UI/CLI.
@@ -1116,4 +1183,48 @@ QVariantMap Backend::segmentAction(const QString &action, const QVariantMap &a) 
         setStatus(result["error"].toString());
     emit activityChanged();
     return result;
+}
+
+int Backend::quickIndex() const { return qBound(0, setting("quick_task_index", "0").toInt(), 3); }
+void Backend::setQuickIndex(int index) {
+    execute("INSERT INTO settings(name,value) VALUES('quick_task_index',?) ON CONFLICT(name) DO UPDATE SET value=excluded.value", {QString::number((index % 4 + 4) % 4)});
+    emit quickChanged();
+}
+void Backend::launchQuickTask() {
+    const int slot = quickIndex();
+    if (slot == 3) { launch("task"); return; }
+    const QStringList names{tr("Research"),tr("News"),tr("Theme")};
+    const QStringList briefs{
+        tr("Prepare a research plan for this project. Use available sources and cite evidence. Live web collection is not connected; ask for sources when needed. Do not claim to browse or execute tools."),
+        tr("Help prepare a news briefing from sources I provide. Check publication dates and separate facts from uncertainty. Live news collection is not connected; do not invent current headlines."),
+        tr("Help plan a desktop theme. Ask what appearance I want and prepare reviewable recommendations. You cannot apply system changes through these chat tools.")};
+    int child = focusWorkspace(m_current, names[slot], briefs[slot]);
+    if(child > 0) { if(m_recorder)m_recorder->action(QStringList{"research","news","theme"}[slot],tr("Opened %1 guided chat").arg(names[slot]));openChat(child); }
+}
+
+QVariantList Backend::keypadControls() const {
+    QFile file(":/numpad.json");
+    if(!file.open(QIODevice::ReadOnly))return {};
+    return QJsonDocument::fromJson(file.readAll()).object()["controls"].toArray().toVariantList();
+}
+
+void Backend::openAgent(const QString &id,const QString &view) {
+    if(!m_agents->select(id)) {setStatus(tr("Agent run not found."));return;}
+    if(view=="terminal") {if(!m_agents->terminal(id))setStatus(tr("Could not open the output terminal."));return;}
+    closeMenu();emit showAgent(view=="prompt"?"prompt":"chat");
+}
+
+QVariantMap Backend::buildAction(const QString &operation,const QVariantMap &arguments) {
+    auto result=m_build->call(m_current,operation,arguments);
+    if(result.value("ok").toBool()&&!BuildLedger::isRead(operation)){emit activityChanged();emit changed();}
+    return result;
+}
+
+QVariantMap Backend::agentReceipt(const QString &id,int scope) const {
+    if(scope==0)scope=m_current;
+    QSqlQuery q(m_db);q.prepare("SELECT target FROM agent_runs WHERE id=?");q.addBindValue(id);
+    if(!q.exec()||!q.next()||!m_ledger->contains(scope,QJsonDocument::fromJson(q.value(0).toByteArray()).object().value("id").toInt()))return {{"error","Agent receipt is outside this workspace"},{"ok",false}};
+    auto result=m_agents->receipt(id);
+    if(result.isEmpty())return {{"ok",false},{"error","No durable receipt is available for this run"}};
+    result["ok"]=true;return result;
 }

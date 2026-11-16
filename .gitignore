@@ -15,3 +15,15 @@
 *.bak
 *.hotbox-backup-*
 *.hotbox-disable-*
+
+# Python tooling caches and user-generated runtime trees.
+__pycache__/
+*.py[cod]
+/agent-runs/
+/task-results/
+/worktrees/
+/.tools/
+
+# Private session exports and configuration backups.
+*.jsonl
+*.backup-*

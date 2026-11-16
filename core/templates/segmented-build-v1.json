@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "id": "segmented-build-fixture",
+  "version": "1.0.0",
+  "limits": {
+    "max_operations": 24,
+    "max_cost_units": 24,
+    "deadline_seconds": 300
+  },
+  "segments": [
+    {
+      "id": "discover",
+      "stage": "discover",
+      "depends_on": [],
+      "executor": "fixture_ok",
+      "required_actions": [
+        "source.read"
+      ],
+      "required_outputs": [
+        "evidence"
+      ],
+      "max_attempts": 2,
+      "timeout_seconds": 30,
+      "cost_units": 1
+    },
+    {
+      "id": "document",
+      "stage": "document",
+      "depends_on": [
+        "discover"
+      ],
+      "executor": "fixture_ok",
+      "required_actions": [
+        "architecture.read"
+      ],
+      "required_outputs": [
+        "evidence"
+      ],
+      "max_attempts": 2,
+      "timeout_seconds": 30,
+      "cost_units": 1
+    },
+    {
+      "id": "plan",
+      "stage": "plan",
+      "depends_on": [
+        "document"
+      ],
+      "executor": "fixture_ok",
+      "required_actions": [
+        "storage.plan"
+      ],
+      "required_outputs": [
+        "evidence"
+      ],
+      "max_attempts": 2,
+      "timeout_seconds": 30,
+      "cost_units": 1
+    },
+    {
+      "id": "prepare",
+      "stage": "prepare",
+      "depends_on": [
+        "plan"
+      ],
+      "executor": "fixture_ok",
+      "required_actions": [
+        "source.write"
+      ],
+      "required_outputs": [
+        "evidence"
+      ],
+      "max_attempts": 2,
+      "timeout_seconds": 30,
+      "cost_units": 1
+    },
+    {
+      "id": "build",
+      "stage": "build",
+      "depends_on": [
+        "prepare"
+      ],
+      "executor": "fixture_ok",
+      "required_actions": [
+        "build.run"
+      ],
+      "required_outputs": [
+        "evidence"
+      ],
+      "max_attempts": 2,
+      "timeout_seconds": 30,
+      "cost_units": 1
+    },
+    {
+      "id": "verify",
+      "stage": "verify",
+      "depends_on": [
+        "build"
+      ],
+      "executor": "fixture_ok",
+      "required_actions": [
+        "verify.run"
+      ],
+      "required_outputs": [
+        "evidence"
+      ],
+      "max_attempts": 2,
+      "timeout_seconds": 30,
+      "cost_units": 1
+    },
+    {
+      "id": "release",
+      "stage": "release",
+      "depends_on": [
+        "verify"
+      ],
+      "executor": "fixture_ok",
+      "required_actions": [
+        "release.publish"
+      ],
+      "required_outputs": [
+        "evidence"
+      ],
+      "max_attempts": 2,
+      "timeout_seconds": 30,
+      "cost_units": 1
+    },
+    {
+      "id": "activate",
+      "stage": "activate",
+      "depends_on": [
+        "release"
+      ],
+      "executor": "fixture_ok",
+      "required_actions": [
+        "runtime.activate"
+      ],
+      "required_outputs": [
+        "evidence"
+      ],
+      "max_attempts": 2,
+      "timeout_seconds": 30,
+      "cost_units": 1
+    }
+  ]
+}

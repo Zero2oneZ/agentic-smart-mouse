@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "status": "proposed",
+  "run_ref": "example-run",
+  "scope_ref": "example-private-project",
+  "runtime_environment_ref": "example-personal-environment",
+  "checkpoint_revision": 4,
+  "base_plan_revision_ref": "example-plan-revision-1",
+  "action": "escalate",
+  "node_refs": ["example-generate-video"],
+  "plan_proposal": null,
+  "evidence_refs": ["example-runner-preflight-unavailable"],
+  "decision_summary": "The video-generation adapter is unavailable. Preserve accepted design artifacts and request a supported runner or a revised task.",
+  "blockers": ["required_video_runner_unavailable"],
+  "wake_condition": null,
+  "budget_snapshot_ref": "example-budget-snapshot-4",
+  "required_checks": ["resolve_supported_video_runner", "recheck_current_scope_and_grants"]
+}

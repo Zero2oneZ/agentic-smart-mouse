@@ -1,0 +1,97 @@
+{
+  "version": 3,
+  "activation": "SUPER + KP_Add",
+  "scope": "focused-mouse-hotbox",
+  "controls": [
+    {
+      "key": "7",
+      "action": "target_northwest",
+      "label": "Select upper-left target; press again to open"
+    },
+    {
+      "key": "8",
+      "action": "target_north",
+      "label": "Select upper target; press again to open"
+    },
+    {
+      "key": "9",
+      "action": "target_northeast",
+      "label": "Select upper-right target; press again to open"
+    },
+    {
+      "key": "4",
+      "action": "previous_spread",
+      "label": "Previous spread: Recent, Favorites, Pinned"
+    },
+    {
+      "key": "5",
+      "action": "center",
+      "label": "Select center; press again for Back or Master chat"
+    },
+    {
+      "key": "6",
+      "action": "next_spread",
+      "label": "Next spread: Recent, Favorites, Pinned"
+    },
+    {
+      "key": "1",
+      "action": "target_southwest",
+      "label": "Select lower-left target; press again to open"
+    },
+    {
+      "key": "2",
+      "action": "target_south",
+      "label": "Select lower target; press again to open"
+    },
+    {
+      "key": "3",
+      "action": "target_southeast",
+      "label": "Select lower-right target; press again to open"
+    },
+    {
+      "key": "/",
+      "action": "record_hotbox",
+      "label": "Start, pause or continue Hotbox recording"
+    },
+    {
+      "key": "*",
+      "action": "browser_capture",
+      "label": "Open companion capture and import options"
+    },
+    {
+      "key": "-",
+      "action": "prepare_starter",
+      "label": "Stop recording and prepare temporary starter"
+    },
+    {
+      "key": "+",
+      "action": "explain",
+      "label": "Add a recording explanation, or write a new prompt"
+    },
+    {
+      "key": "enter",
+      "action": "confirm",
+      "label": "Save entry; otherwise stop recording or write a prompt"
+    },
+    {
+      "key": "0",
+      "action": "run_headless",
+      "label": "Prompt a headless agent for the selected target"
+    },
+    {
+      "key": "escape",
+      "action": "close",
+      "label": "Close Hotbox"
+    },
+    {
+      "key": ".",
+      "action": "target_options",
+      "label": "Open selected target options"
+    },
+    {
+      "key": "page",
+      "action": "next_page",
+      "label": "Page Up / Page Down: more wheel targets"
+    }
+  ]
+}
