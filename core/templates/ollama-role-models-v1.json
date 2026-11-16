@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "provider": "ollama",
+  "harness": "claude",
+  "roles": {
+    "builder": {
+      "model": "deepseek-v4.1-flash:cloud",
+      "direct_api_model": "deepseek-v4.1-flash"
+    },
+    "vision": {
+      "model": "inkling-2-small:cloud",
+      "direct_api_model": "inkling-2-small"
+    }
+  }
+}

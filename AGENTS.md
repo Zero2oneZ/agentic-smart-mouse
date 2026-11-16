@@ -3,6 +3,25 @@
 Build with `bin/build`. Run backend and QML tests offscreen with `bin/test`.
 Tests must use temporary databases and local mock model endpoints.
 
+Read core/docs/ARCHITECTURE.md (Product interaction and continuity contract),
+core/docs/SYSTEM_MODEL.md and core/docs/AGENT_BUILDER_PLAN.md before changing
+navigation, authoring or context behavior. The mouse Hotbox is the categorized
+entry point for creating and using tools/agents and controlling context. Reusable
+tools need registry-backed menu placement and declared eligible actions, including
+their originating development context; a generic chat/category is not a tool.
+Keep execution/orchestration headless, chats simple, and the master area focused
+on permission/scope governance. Preserve the parent task across focused side work
+and link results back. The chat panel/post layout is presentation only, not proof
+of durable task threads, context handoffs or tool registration.
+User-message references and implementation findings are in
+docs/CONTEXT_REQUIREMENTS.md. Follow core/docs/TOOL_CONTEXT_DELIVERY_PLAN.md for
+the connected tool/menu/context track alongside the existing B0-B7 execution gates.
+The first draft registration/menu/Edit bridge is implemented in core/src/toolmenu.rs
+and src/toolregistry.cpp. Keep core metadata authoritative, preserve Qt chat IDs,
+and replay saved requests rather than create replacement tools/chats. Run remains
+unavailable until the verified release/runner gates exist. Explicit task/focus/return
+continuity is the next ticket; do not confuse the post layout with that behavior.
+
 Do not inject keyboard or mouse input into the user's active desktop. Use
 offscreen Qt tests for interaction checks. The global activation gesture is Ctrl + Super held for 300 ms. Do not change
 the user's desktop configuration without an explicit request. Validate bindings

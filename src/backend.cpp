@@ -1,4 +1,5 @@
 #include "backend.h"
+#include "modelcredentials.h"
 #include "gitworkspace.h"
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -158,8 +159,15 @@ Backend::Backend(const QString &directory, QObject *parent, bool automaticTasks)
                     m_bindings.append(line.trimmed());
                 emit bindingsChanged();
             });
+    initToolRegistry(automaticTasks);
 }
 Backend::~Backend() {
+    m_toolProcess.disconnect(this);
+    m_toolTimeout.stop();
+    if (toolRegistryBusy()) {
+        m_toolProcess.kill();
+        m_toolProcess.waitForFinished(1000);
+    }
     if (m_reply) {
         m_reply->disconnect(this);
         m_reply->abort();
@@ -410,7 +418,7 @@ void Backend::startReply() {
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setTransferTimeout(120000);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
-    const QByteArray token = qgetenv(keyVariable().toUtf8().constData());
+    const QByteArray token = modelCredential(m_directory, keyVariable());
     if (!token.isEmpty())
         request.setRawHeader("Authorization", "Bearer " + token);
     m_answer.clear();

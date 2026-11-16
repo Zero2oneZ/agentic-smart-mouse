@@ -1,14 +1,17 @@
 #include "agentservice.h"
+#include "modelcredentials.h"
 #include "providerreceipts.h"
 #include "sessionledger.h"
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QProcessEnvironment>
 #include <QSaveFile>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -222,6 +225,8 @@ QString AgentService::start(const QString &prompt, const QVariantMap &target, co
         safeTarget["build"] = target["build"].toString();
     if (target.contains("step"))
         safeTarget["step"] = target["step"].toString();
+    if (target.contains("modelRole"))
+        safeTarget["modelRole"] = target["modelRole"].toString();
     QString prior;
     if (!previous.isEmpty()) {
         auto source = read(previous);
@@ -229,6 +234,33 @@ QString AgentService::start(const QString &prompt, const QVariantMap &target, co
             return fail(tr("The previous run is unavailable."));
         safeTarget = source["target"].toMap();
         prior = source["output"].toString().right(16000);
+    }
+    const QString modelRole = safeTarget.value("modelRole").toString();
+    QString cloudModel;
+    QByteArray cloudKey;
+    if (!modelRole.isEmpty()) {
+        if (provider != "claude")
+            return fail(tr("Ollama cloud roles use the Claude harness."));
+        if (!previous.isEmpty()) {
+            cloudModel = safeTarget.value("cloudModel").toString();
+            if (cloudModel.isEmpty() || safeTarget.value("modelCatalogDigest").toString().isEmpty())
+                return fail(tr("The previous run has no pinned cloud model."));
+        } else {
+            QFile models(":/ollama-role-models-v1.json");
+            if (!models.open(QIODevice::ReadOnly))
+                return fail(tr("Cloud role definitions are unavailable."));
+            const auto bytes = models.readAll();
+            cloudModel = QJsonDocument::fromJson(bytes).object()["roles"].toObject()
+                             [modelRole].toObject()["direct_api_model"].toString();
+            if (cloudModel.isEmpty())
+                return fail(tr("Choose the Builder or Vision cloud role."));
+            safeTarget["cloudModel"] = cloudModel;
+            safeTarget["modelCatalogDigest"] = QString::fromLatin1(
+                QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
+        }
+        cloudKey = modelCredential(QFileInfo(m_directory).absolutePath(), "OLLAMA_API_KEY");
+        if (cloudKey.isEmpty())
+            return fail(tr("The cloud role needs OLLAMA_API_KEY in the environment or private secrets.env."));
     }
     if (!safeTarget.value("build").toString().isEmpty()) {
         if (!m_buildContext)
@@ -342,6 +374,15 @@ QString AgentService::start(const QString &prompt, const QVariantMap &target, co
         return fail(tr("Build binding failed. Reload the roadmap and step."));
     }
     auto *process = new QProcess(this);
+    if (!cloudModel.isEmpty()) {
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.insert("ANTHROPIC_BASE_URL", "https://ollama.com");
+        environment.insert("ANTHROPIC_AUTH_TOKEN", QString::fromUtf8(cloudKey));
+        environment.insert("ANTHROPIC_API_KEY", "");
+        for (const auto &tier : {"ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL"})
+            environment.insert(tier, cloudModel);
+        process->setProcessEnvironment(environment);
+    }
 #ifdef Q_OS_LINUX
     const auto ownerPid = getpid();
     process->setChildProcessModifier([ownerPid] {
@@ -463,6 +504,8 @@ QString AgentService::start(const QString &prompt, const QVariantMap &target, co
                          .value("output_args")
                          .toList())
         args.append(flag.toString());
+    if (!cloudModel.isEmpty())
+        args << "--model" << cloudModel;
     emit capturedEvent(safeTarget["id"].toInt(), "agent.prompt",
                        tr("Prompt for %1").arg(safeTarget["name"].toString()), cleanPrompt, id);
     emit capturedEvent(safeTarget["id"].toInt(), "context.loaded", tr("Loaded agent context"), input, id);

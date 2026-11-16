@@ -4,6 +4,30 @@
 
 A native Omarchy hotbox for local tasks, persistent project chats and saved work.
 
+The product direction is a categorized mouse launcher for reusable tools and agents,
+simple scoped chats with linked history/artifacts, and headless execution under
+master permission/context controls. See the [interaction and continuity contract](core/docs/ARCHITECTURE.md#product-interaction-and-continuity-contract).
+Registered tool drafts now appear in categorized Hotbox menus and reopen their
+linked development chats through Edit. Automatic build/release publication and
+side-task return handoffs remain unconnected.
+The [requirements audit](docs/CONTEXT_REQUIREMENTS.md) traces this direction to the
+original conversations and current code; the [delivery plan](core/docs/TOOL_CONTEXT_DELIVERY_PLAN.md)
+tracks the tool-registration/context bridge and the remaining acceptance checks.
+
+## Create and find a tool
+
+Open **Mouse Hotbox → Tools → + New tool**, or choose **Tools** in the sidebar.
+Give the tool a name, purpose and Hotbox category, then save. Its linked development
+chat opens in the side panel. Find it again under **Tools → its category**, or save
+it in Favorites/Pinned. **Edit** returns to the same chat; **Name and category**
+changes its label/placement without changing its identity or history.
+
+Saving registers a draft and starts no agent. Run stays unavailable because this
+slice has no verified release/runtime adapter. Registration, rename, restart and
+interrupted-response replay are covered with the real core and temporary data.
+See the [tool menu API](core/docs/TOOL_MENU_REFERENCE.md) for the scoped contract.
+
+
 The mouse Hotbox now uses directional numpad selection: press a direction once to highlight and again to open. **4 / 6** change **Recent / Favorites / Pinned** with a small animation. **+** adds an explanation during recording or opens a prompt, and **Enter** saves the entry or stops recording. Stopped recordings and typed prompts become temporary starter projects with README/prompt files and **Terminal / Codex once / Claude once** options. See [mouse controls and starter projects](docs/NUMPAD_AND_RECORDING.md).
 
 Explicit recordings collect Hotbox actions, notes and supplied URLs into private, reviewable helper drafts. The optional [browser companion](browser-companion/README.md) records selected-tab actions without cookies or typed values. Drafts are not executable agents.
@@ -74,17 +98,31 @@ functionality acceptance. This preserves the Rust execution and verification con
 
 `hotbox check --json` reports database and model configuration status without a display. `hotbox --smoke OUTPUT_DIRECTORY` renders sample chat and menu screenshots offscreen, using an isolated database.
 
+`bin/core-cargo` uses `.tools/rust/bin` when installed, otherwise Cargo on PATH,
+and keeps fetched dependencies in `.tools/cargo` by default. Full builds and
+`core/scripts/check` use this wrapper; explicit `CARGO`, `CARGO_HOME`, `RUSTC` and
+`RUSTDOC` overrides remain supported. Before the first fresh core build, fetch
+the locked dependencies from a terminal with network access:
+
+```sh
+bin/core-cargo fetch --manifest-path core/Cargo.toml --locked
+```
+
+The local Rust 1.100.0-beta.7 toolchain was installed from the existing cached
+distribution. Locked dependencies are now fetched; fresh core formatting, Clippy,
+51 integration tests and both CLI fixtures pass. The full desktop build succeeds.
+
 The development machine uses a user-local install: executable in `~/.local/bin/hotbox`, desktop entry in `~/.local/share/applications/`, and keyboard integration in `~/.local/share/hotbox/hotbox.lua`. Startup is configured in the user's Hyprland autostart; their bindings load the integration file. System package installation was not completed because sudo authentication was required.
 
 `integration/hotbox.lua` contains the Ctrl + Super and Super + numpad + bindings. The Arch package installs that file at `/usr/share/hotbox/hotbox.lua`. Configuration changes require `hyprctl reload` and `hyprctl configerrors`. Install or change desktop bindings only when explicitly requested.
 
 ## Verification
 
-Forty Qt Test checks cover the application. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, context-tool round trips, architecture registration, shared-library reuse, and preservation of user files. Offscreen screenshots use sample content. The live overlay rendered successfully; the previous Tab + Q shortcut failed verification. The replacement Ctrl + Super bindings passed Lua callback checks and loaded in Hyprland without configuration errors; they still require a physical-keyboard check. The Super + numpad + binding is loaded without configuration errors. Numpad focus, NumLock aliases, recording recovery and browser import filtering pass offscreen tests; five browser-companion tests and the Lua keypad callback check pass. The companion has not been tested in a live browser. Keep desktop keyboard injection out of further automated checks.
+The offline Qt profile passes 44 checks, excluding three TCP mock tests. This includes tool creation, menu/context identity, rename/restart, replay and incompatible-helper recovery. `bin/test-cli` exercises the complete headless session workflow after a build. The Qt Test suite covers persistence and archive restoration, hold timing, settings validation, streamed replies returning to their original workspace, failed connections retaining messages, scoped event retrieval, redaction, focused handoffs, bounded context, isolated Git worktrees, local bare-remote pushes, background scheduling, context-tool round trips, architecture registration, shared-library reuse, and preservation of user files. Offscreen screenshots use sample content. The live overlay rendered successfully; the previous Tab + Q shortcut failed verification. The replacement Ctrl + Super bindings passed Lua callback checks and loaded in Hyprland without configuration errors; they still require a physical-keyboard check. The Super + numpad + binding is loaded without configuration errors. Numpad focus, NumLock aliases, recording recovery and browser import filtering pass offscreen tests; five browser-companion tests and the Lua keypad callback check pass. The companion has not been tested in a live browser. Keep desktop keyboard injection out of further automated checks.
 
 ## Model connection
 
-Open Model settings. Enter an OpenAI-compatible **chat completions** endpoint, model name, and API-key environment variable (default `HOTBOX_API_KEY`). The default endpoint is local Ollama at `http://127.0.0.1:11434/v1/chat/completions`; choose an installed model. Remote endpoints require HTTPS. Secrets are read from the process environment, never saved to SQLite. Restart the daemon after changing its environment. Sending transmits a bounded project brief, recent event summaries, and up to 12 recent messages (12,000 characters total). Master chat also receives a compact directory of up to 40 visible workspaces. Each request is capped at 64,000 serialized bytes, with at most four rounds of two context lookups. Older messages remain in the local database and can be read through their event references.
+Open Model settings. Enter an OpenAI-compatible **chat completions** endpoint, model name, and API-key environment variable (default `HOTBOX_API_KEY`). The default endpoint is local Ollama at `http://127.0.0.1:11434/v1/chat/completions`; choose an installed model. Remote endpoints require HTTPS. Secrets are read from the process environment first, then from `secrets.env` in the Hotbox data directory (normally `~/.local/share/hotbox/secrets.env`), never saved to SQLite. Use `OLLAMA_API_KEY=your-key` and set the API-key variable in Model settings to `OLLAMA_API_KEY`; single quotes, double quotes and unquoted values are supported. The file must be private (`chmod 600`), and is parsed as data without executing shell commands. File changes take effect on the next request; restart the daemon after changing its process environment. The credential regression check passes for quoted/unquoted values, environment precedence and rejection of publicly readable files. Live authentication is not verified in network-restricted coding sessions. Sending transmits a bounded project brief, recent event summaries, and up to 12 recent messages (12,000 characters total). Master chat also receives a compact directory of up to 40 visible workspaces. Each request is capped at 64,000 serialized bytes, with at most four rounds of two context lookups. Older messages remain in the local database and can be read through their event references.
 
 Without a model, messages still save locally and the app explains how to connect replies. Model responses stream and survive restart. Stop preserves partial responses. The model can look up events and create focused child chats through function tools. It cannot edit files, execute commands, or manage Git itself; Generate opens the category chat for discussing a request. Use a model that supports Chat Completions function tools.
 
@@ -284,6 +322,77 @@ IDs, agent execution, collectors and live data pipelines are planned adapters, n
 implemented services. Existing media paths and runtime bindings are unchanged.
 
 
+## Ollama cloud role models
+
+The shared [role catalog](core/templates/ollama-role-models-v1.json) selects
+`deepseek-v4.1-flash:cloud` for Builder and `inkling-2-small:cloud` for Vision.
+The UI embeds that catalog; rebuild after editing it. In the wheel agent prompt
+or build-step Run dialog, select **Builder · Ollama cloud** or **Vision · Ollama cloud**.
+Both use the existing supervised Claude runner: private run directories, scoped
+context, output terminals, pinned parent budgets, stop controls and durable usage
+receipts. The selected direct API model and catalog digest are pinned in each
+run's target; follow-ups retain the original model. Missing provider usage still
+blocks follow-ups. The role choice does not grant new execution permissions or
+independent acceptance. Vision selects an image-capable model; this change does
+not add image attachment or desktop capture to Hotbox's text prompt UI.
+
+From any terminal, use the project entry points:
+
+```sh
+cd /home/tom/Work/hotbox
+bin/project-shell
+launch-role builder --supervised --category 1 --prompt 'Review the next build step'
+launch-role vision --supervised --category 1 --prompt 'Review the supplied visual evidence references'
+```
+
+`--supervised` submits a bounded request to the running Hotbox controller through
+its local socket and returns a run ID; results appear in the existing agent UI
+and output terminals. It never starts a second scheduler. Workspace IDs must
+exist. The terminal keeps its working directory. `bin/project-shell COMMAND...`
+can also execute one command with the same project tool paths and data location.
+Existing unrelated terminals are not reconfigured; start a project shell in each.
+Standalone interactive sessions use `bin/launch-role builder` or `vision`, with
+Claude arguments after `--`; these sessions do not create supervised run receipts.
+
+The default direct cloud transport reuses the private Hotbox `OLLAMA_API_KEY`
+and the existing Claude installation. It sets the Anthropic-compatible cloud
+endpoint and all Claude model tiers for that child process only, following
+[Ollama's direct cloud integration](https://github.com/ollama/ollama/blob/main/docs/integrations/claude-code.mdx).
+No daemon, model download or global Claude configuration edit is required.
+Provider/user Claude settings can override environment routing; check `/status`
+in an interactive session if you have existing provider overrides.
+
+`bin/install-ollama` downloads the official Linux archive and installs only its
+cloud CLI into `.tools/ollama/bin/ollama`, without sudo or GPU libraries. Tools
+and installation metadata are ignored by Git; private chats and secrets stay
+outside the repository. Then `bin/launch-role builder --via ollama` uses that
+project CLI and Ollama's own sign-in. `bin/project-shell` adds its bin directory
+to PATH. Direct cloud and native Ollama CLI authentication are separate routes.
+The project-local Ollama CLI is installed and verified at version 0.40.16.
+Live cloud authentication has not been verified.
+On normal app startup, Hotbox checks the Ollama endpoint and starts `ollama serve`
+if a local endpoint is unavailable. An existing server is reused; remote endpoints
+are left to their owner. Check and smoke commands do not start Ollama. The server
+continues after Hotbox closes; its output is saved in the Hotbox data directory
+as `ollama.log`. `bin/install-local` also installs the project CLI for desktop launches.
+App startup was verified with Ollama 0.40.16 listening on `127.0.0.1:11434`.
+This CLI-only installation supports cloud routing; local inference needs the
+additional Ollama runner libraries. Run `bin/install-ollama --full` to download
+the complete official package into `.tools/ollama`, including `lib/ollama`.
+No sudo is needed. Then `bin/install-local --desktop-only` includes those
+libraries in the desktop installation. The full package is installed in the project and desktop runtime. Both runner
+binaries execute successfully and their shared libraries resolve. Local model
+inference and cloud authentication have not yet been verified.
+Add `--dry-run` to inspect a role command or supervised request without launching.
+Verification: `python tests/project_runtime_smoke.py` passes using temporary mock
+tools and a local archive. The offscreen Qt credential/cloud-role, UI-load,
+receipt/follow-up and runtime checks pass; live cloud access and the new
+controller socket round trip are not verified in this restricted session.
+Requested model identity is recorded in the run target; authenticated receipt
+model identity remains unknown under the existing provider contract.
+Official model references: [DeepSeek](https://ollama.com/library/deepseek-v4.1-flash)
+and [Inkling](https://ollama.com/library/inkling-2-small).
+
 ## Portable environments and capability backpacks
 
 The [environment contract](core/docs/ENVIRONMENTS.md) adds local/cloud planning for
@@ -444,3 +553,15 @@ The full model-assisted planner, automatic master-tree changes, independent
 verification adapter and uv environment registry are not connected yet.
 
 Master-loop validation is included in the [offline verification profile](#verification), covering usage aggregation, retained parent lineage, reported-budget exhaustion and Master-scope access. The CLI workflow validates `hotbox optimize` as a read-only report. No live model-assisted optimizer or provider token-cap enforcement is claimed.
+
+### Project chat panel preview
+
+Project chat opens as a non-modal sliding right panel above the current work view.
+Its color border and large project heading identify the active context. Opening
+chat preserves the underlying page, and unsent drafts stay with their project
+while switching contexts. Each user message starts a task post; subsequent chat
+replies appear under that post until the next user message. Replies show the
+assistant/model label and recorded summary, with full evidence available on
+expansion. Operational events remain separate collapsible activity segments.
+This is a presentation of the existing scoped ledger: no transcript migration,
+new permissions, or automated claims of task achievement are introduced.

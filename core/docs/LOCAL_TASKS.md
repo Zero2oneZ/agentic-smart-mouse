@@ -25,7 +25,7 @@ runtime. Existing model tools remain read-only.
 ## State, identity and files
 
 - Qt chat/category storage stays in `hotbox.sqlite3`.
-- Rust tasks use `orchestration.sqlite3` beside it, kernel schema 3.
+- Rust tasks use `orchestration.sqlite3` beside it, kernel schema 4.
 - Each desktop task gets a random `wrun_<UUID hex>` ID and a friendly editable-input
   title. Its immutable request includes the source `workspace-<Qt ID>` reference.
 - Result path: `task-results/<run-id>/notes.md`, relative to that private data folder.
@@ -87,8 +87,8 @@ beside the app binary. `HOTBOX_CORE_BINARY` is an optional trusted developer/tes
 absolute executable override; symlinked helpers are rejected.
 
 `bin/install-local` backs up both SQLite stores and existing executables, installs
-the app/helper, and restarts the resident app. It does not change keyboard bindings.
-Schema 1/2 upgrade additively to 3. Older core binaries reject schema 3: restore a
+the app/helper; restart the resident app separately. It does not change keyboard bindings.
+Schemas 1/2/3 upgrade additively to 4. Older core binaries reject schema 4: restore a
 consistent backup with the matching binary to downgrade; never lower user_version
 by hand. Back up task-results and private registries as well as chat history.
 

@@ -95,6 +95,55 @@ distributable mother repository. The existing storage registry is a logical loca
 boundary, not OS-level isolation. The Rust kernel currently names resources for
 policy evaluation; those names do not resolve to filesystem mounts.
 
+## Product interaction and continuity contract
+
+Original and current-chat requirements are traced in
+[the implementation audit](../../docs/CONTEXT_REQUIREMENTS.md); the
+[delivery plan](TOOL_CONTEXT_DELIVERY_PLAN.md) connects this contract to phased
+changes and acceptance evidence.
+
+The mouse Hotbox is the categorized entry point for creating, finding and using
+tools and agents, and for selecting and controlling their context. A reusable
+tool produced by a build must have a durable identity, source/version reference,
+category placement, originating development context and declared actions. Its
+eligible options belong on that tool's Hotbox entry. Categorization is navigation;
+it neither grants access nor authorizes execution. Menu refresh follows the
+verified release/runtime registry, not an inferred list of files or chat titles.
+
+Chats remain simple work surfaces that accumulate linked history, decisions,
+documents and artifacts. A focused side task (such as editing the GUI while
+building a tool) retains its parent task and handoff references. Its result links
+back to the original work so the user can resume without restating the objective.
+Assemble a bounded brief, relevant summaries and permitted original evidence;
+do not copy every transcript into every model request. An OS-connected tool may
+change the GUI or other authorized host resources through the same controlled
+operations and explicit scope boundaries as other work.
+
+Orchestration, retrieval, checkpoints and worker execution run headlessly. The
+master GUI presents permission/scope governance, approvals and shared context
+controls. The sliding project chat and task-post/reply layout are presentation
+surfaces over those services, not separate orchestration or permission authorities.
+
+Implemented first bridge: the core's owner-scoped tool menu API registers draft
+identities and category/display metadata alongside existing tool/version records.
+Qt stores an explicit development-chat binding and durable request outbox. The
+wheel projects categorized entries; Edit revalidates the core identity/context
+before opening that chat. Requests replay safely after restart. No process is
+launched by registration or navigation. See [the API](TOOL_MENU_REFERENCE.md).
+
+Remaining gap: verified build/release publication and general runtime actions are
+unconnected, so registered drafts cannot Run. The chat panel still groups ledger
+rows for display without durable task/reply identities or automatic side-task
+return handoffs. Existing focused chats and scoped evidence references remain
+the foundation. Agent runs and provider receipts are not reusable agent definitions.
+
+The next integrations add explicit task/focus/return relationships and later
+connect verified release/runtime actions, respecting the existing scope and
+runtime eligibility contracts. Preserve legacy category IDs through
+explicit mappings; extend the existing core rather than add a second registry or
+scheduler. Renaming, recategorizing or changing the chat layout must not change
+identity, grants, source ancestry or execution history.
+
 ## Hotbox context routing — target
 
 | Interaction | Intended result |
@@ -162,7 +211,7 @@ An OCI CLI packaging recipe is included but has not been image-built here.
 ## First desktop/core integration
 
 The [local notes workflow](LOCAL_TASKS.md) uses `TaskService` in Qt to invoke named
-core commands with bounded input/output and timeout. Rust owns the separate schema-3
+core commands with bounded input/output and timeout. Rust owns the separate schema-4
 orchestration database and private task results; Qt owns existing categories/chats.
 The resident app advances steps asynchronously across the local actor's projects.
 This is an implemented vertical slice, not the future generic worker supervisor.

@@ -10,6 +10,9 @@ general leased agent dispatch or independent acceptance.
 
 | Start here | Contents |
 | --- | --- |
+| [Chat requirements audit](../../docs/CONTEXT_REQUIREMENTS.md) | User-message provenance and current implementation gaps for tools, menus and context continuity |
+| [Tool and context delivery](TOOL_CONTEXT_DELIVERY_PLAN.md) | Implementation track connecting categorized tools, development contexts and verified releases under existing execution gates |
+| [Tool menu API](TOOL_MENU_REFERENCE.md) | Implemented owner-scoped draft registration, listing, metadata revisions and idempotent receipts |
 | [Contract audit](../../docs/CONTRACT_AUDIT.md) | Implemented/partial/planned capability map, direct references, findings and change workflow |
 | [Provider receipts](PROVIDER_RECEIPTS.md) | Normalized immutable observations, cache accounting, scoped reads and unknown-usage stopping |
 | [Generated build API](BUILD_LEDGER_REFERENCE.md) | Shared catalog operations, fields, enums and checked source/test references |

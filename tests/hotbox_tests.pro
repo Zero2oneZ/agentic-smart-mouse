@@ -2,6 +2,7 @@ QT += core gui qml quick quickcontrols2 testlib network sql concurrent
 CONFIG += c++17 testcase
 TARGET = hotbox_tests
 TEMPLATE = app
+SOURCES += ../src/toolregistry.cpp
 INCLUDEPATH += ../src
 HEADERS += ../src/backend.h ../src/theme.h ../src/translator.h
 SOURCES += hotbox_tests.cpp ../src/backend.cpp ../src/theme.cpp ../src/translator.cpp

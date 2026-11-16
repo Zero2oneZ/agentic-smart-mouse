@@ -29,6 +29,7 @@ ColumnLayout {
   ColumnLayout {
    Layout.fillWidth:true;Layout.fillHeight:true
    Label {text:root.job.title||qsTr("No run selected");textFormat:Text.PlainText;font.pixelSize:20;Layout.fillWidth:true}
+   Label {visible:!!root.job.target&&!!root.job.target.cloudModel;text:root.job.target&&root.job.target.cloudModel?root.job.target.modelRole+" · "+root.job.target.cloudModel+" · Ollama cloud":"";textFormat:Text.PlainText;Layout.fillWidth:true}
    Label {text:qsTr("%1 · %2").arg(root.identity.mark).arg(root.identity.route);textFormat:Text.PlainText;wrapMode:Text.Wrap;Layout.fillWidth:true;color:root.identity.color}
    Label {visible:!!root.job.receipt&&!!root.job.receipt.usage;Layout.fillWidth:true;wrapMode:Text.Wrap;textFormat:Text.PlainText;color:"#aeb9c9";text:root.job.receipt&&root.job.receipt.usage?qsTr("Receipt: %1 · usage %2 · functionality unverified").arg(root.job.receipt.outcome).arg(root.job.receipt.usage.status):""}
    Label {visible:!!root.job.loop;Layout.fillWidth:true;wrapMode:Text.Wrap;color:"#aeb9c9";text:root.job.loop&&root.job.loop.usageKnown?qsTr("Reported tokens: %1 input / %2 output · follow-up %3").arg(root.job.loop.inputTokens).arg(root.job.loop.outputTokens).arg(root.job.loop.depth):qsTr("Token usage not reported · the loop will not assume zero")}

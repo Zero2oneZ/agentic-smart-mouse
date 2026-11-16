@@ -4,6 +4,12 @@ The [build roadmap](BUILD_ROADMAP.md) and [planned build swarm](PLANNED_SWARM_AG
 define the first implementation slice. The current Agents run monitor is distinct
 from the general builder proposed here.
 
+The [tool and context delivery plan](TOOL_CONTEXT_DELIVERY_PLAN.md) now sequences
+the shared typed-menu, identity, development-context and continuity integration.
+Its [requirements audit](../../docs/CONTEXT_REQUIREMENTS.md) cites the original
+Agents-category request and current-chat corrections. Reuse that infrastructure
+for this builder; an agent run monitor remains distinct from a reusable definition.
+
 ## Status and intended outcome
 
 **Plan only.** This change does not add a live menu entry, create agents or VMs,

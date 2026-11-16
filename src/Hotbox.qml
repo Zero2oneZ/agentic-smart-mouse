@@ -24,6 +24,7 @@ Window {
  property real anchorX:width/2
  property real anchorY:height/2
  property int currentParent:0
+ property var toolRoute:({kind:"none"})
  property var stack:[]
  property var contextItem:({})
  property var entries:[]
@@ -31,15 +32,24 @@ Window {
  width:1000;height:760;visible:false;color:"transparent"
  flags:Qt.FramelessWindowHint|Qt.WindowStaysOnTopHint|Qt.Tool
  Material.theme:Material.Dark;Material.accent:theme.accent;Material.roundedScale:theme.radius
- function resetMenu(){currentParent=0;stack=[];contextItem={};selectedIndex=-1;pageIndex=0;centerSelected=false;entryMode="";rebuild();keyboard.forceActiveFocus()}
+ function resetMenu(){currentParent=0;toolRoute={kind:"none"};stack=[];contextItem={};selectedIndex=-1;pageIndex=0;centerSelected=false;entryMode="";rebuild();keyboard.forceActiveFocus()}
  function rebuild(){
   var items=[]
   if(currentParent===0)items=[{name:qsTr("New task"),glyph:"+",action:"task"},{name:qsTr("Activity"),glyph:"◷",action:"activity"},{name:qsTr("Folder"),glyph:"▱",action:"folder"},{name:qsTr("Tools"),glyph:"⚒",action:"tools"},{name:qsTr("Browser"),glyph:"↗",action:"browser"}]
-  else if(currentParent===-1)items=[{name:qsTr("Terminal"),glyph:">_",action:"terminal"},{name:qsTr("Open folder"),glyph:"▱",action:"folder"},{name:qsTr("Keybindings"),glyph:"⌨",action:"keybindings"}]
+  else if(currentParent===-1){
+   if(toolRoute.kind==="tool_category"){
+    for(var tool of backend.registeredTools)if(tool.menu_category===toolRoute.category)items.push(tool)
+    items.push({name:qsTr("+ New tool"),glyph:"+",action:"tool_create",menu_category:toolRoute.category})
+   }else{
+    var toolGroups=Object.create(null)
+    for(var tool of backend.registeredTools){var group=tool.menu_category||qsTr("Pending");if(!toolGroups[group]){toolGroups[group]=true;items.push({name:group,glyph:"▸",action:"tool_group",menu_category:group})}}
+    items.push({name:qsTr("+ New tool"),glyph:"+",action:"tool_create"},{name:qsTr("Manage tools"),glyph:"⚒",action:"tool_manage"},{name:qsTr("Terminal"),glyph:">_",action:"terminal"},{name:qsTr("Open folder"),glyph:"▱",action:"folder"},{name:qsTr("Keybindings"),glyph:"⌨",action:"keybindings"})
+   }
+  }
   else items=[{name:qsTr("Open chat"),glyph:"◎",action:"chat",id:currentParent},{name:qsTr("Open folder"),glyph:"▱",action:"folder",id:currentParent}]
   var children=currentParent<0?[]:backend.children(currentParent)
   for(var i=0;i<children.length;i++)items.push({name:children[i].name,glyph:"▸",action:"category",id:children[i].id})
-  items.push({name:qsTr("Add category"),glyph:"+",action:"add"})
+  if(currentParent!==-1)items.push({name:qsTr("Add category"),glyph:"+",action:"add"})
   if(currentParent===0){
    var saved=backend.wheelItems(groups[groupIndex])
    if(groupIndex===0){for(var item of items){var found=false;for(var prior of saved)if(prior.action===item.action&&(prior.id||backend.currentId)===(item.id||backend.currentId))found=true;if(!found)saved.push(item)}}
@@ -54,8 +64,17 @@ Window {
   path.push(action)
   return backend.identifyFeed(item.id||backend.currentId,path,groups[groupIndex],action,remember)
  }
+ function refreshTools(){
+  var selected=selectedIndex>=0?entries[selectedIndex]:null;var centered=centerSelected
+  rebuild()
+  if(selected)for(var i=0;i<entries.length;i++){var item=entries[i];if(item.action===selected.action&&item.tool_id===selected.tool_id&&item.id===selected.id&&item.menu_category===selected.menu_category){selectedIndex=i;pageIndex=Math.floor(i/6);break}}
+  centerSelected=centered
+ }
  function choose(item){
-  if(item.action==="tools"||item.action==="category"){backend.latchMenu();backend.touchWheel(item.action,item.id||backend.currentId);pageIndex=0;stack.push(currentParent);currentParent=item.action==="tools"?-1:item.id;rebuild();return}
+  if(item.action==="tool_group"){backend.latchMenu();toolRoute={kind:"tool_category",category:item.menu_category};pageIndex=0;rebuild();return}
+  if(item.action==="tool_create"||item.action==="tool_manage"){backend.closeMenu();owner.openTools(item.menu_category||"",item.action==="tool_create");return}
+  if(item.action==="registered_tool"){backend.latchMenu();backend.touchToolWheel(item.tool_id);contextItem=item;contextPanel.x=Math.max(8,Math.min(width-contextPanel.width-8,menuRoot.cx+65));contextPanel.y=Math.max(8,Math.min(height-contextPanel.height-8,menuRoot.cy-60));return}
+  if(item.action==="tools"||item.action==="category"){backend.latchMenu();backend.touchWheel(item.action,item.id||backend.currentId);pageIndex=0;stack.push(currentParent);currentParent=item.action==="tools"?-1:item.id;if(item.action==="tools")toolRoute={kind:"tools"};rebuild();if(item.action==="tools")backend.refreshToolRegistry();return}
   if(item.action==="add"){backend.closeMenu();owner.reveal();owner.editCategory(-1,Math.max(0,currentParent));return}
   if(item.action==="chat")identityFor(item,qsTr("Chat"),true)
   backend.launch(item.action,item.id===undefined?backend.currentId:item.id)
@@ -66,6 +85,7 @@ Window {
   target:backend
   function onExpandedChanged(){if(!backend.expanded){contextItem={};entryMode="";hideDelay.restart()}else hideDelay.stop()}
   function onChanged(){overlay.rebuild()}
+  function onToolsChanged(){overlay.refreshTools()}
  }
  MouseArea {anchors.fill:parent;onClicked:backend.closeMenu();acceptedButtons:Qt.LeftButton|Qt.RightButton}
  Rectangle {anchors.fill:parent;color:"#3907090e";opacity:overlay.spread}
@@ -112,7 +132,7 @@ Window {
     Label {text:overlay.currentParent===0?qsTr("5  MASTER CHAT"):qsTr("5  BACK");font.pixelSize:9;font.letterSpacing:0.6;color:"#b8c0ce";anchors.horizontalCenter:parent.horizontalCenter}
    }
    MouseArea {anchors.fill:parent;onDoubleClicked:{overlay.identityFor({name:qsTr("Master chat"),id:1},qsTr("Chat"),true);backend.openChat(1)}
-    onClicked:{if(overlay.currentParent!==0){overlay.currentParent=overlay.stack.length?overlay.stack.pop():0;overlay.rebuild()}}}
+    onClicked:overlay.goBack()}
   }
   Rectangle {
    visible:overlay.currentParent===0;x:Math.max(8,Math.min(parent.width-width-8,menuRoot.cx-width/2));y:Math.max(8,Math.min(parent.height-height-8,menuRoot.cy+menuRoot.radiusY+58));width:330;height:30;radius:theme.radius;color:"#dd11151c";opacity:overlay.spread
@@ -127,13 +147,15 @@ Window {
  }
  function mark(group){
   var item=contextItem;var id=item.id===undefined?backend.currentId:item.id;var enabled=true
+  if(item.action==="registered_tool"){for(var saved of backend.wheelItems(group))if(saved.tool_id===item.tool_id)enabled=false;backend.markToolWheel(item.tool_id,group,enabled);contextItem={};return}
   for(var saved of backend.wheelItems(group))if(saved.action===item.action&&saved.id===id)enabled=false
   backend.markWheel(item.action,id,group,enabled);contextItem={}
  }
- function changeGroup(delta){backend.latchMenu();groupIndex=(groupIndex+delta+3)%3;currentParent=0;stack=[];pageIndex=0;contextItem={};rebuild();wheelAnimation.restart()}
+ function goBack(){if(currentParent===-1&&toolRoute.kind==="tool_category"){toolRoute={kind:"tools"}}else if(currentParent!==0){currentParent=stack.length?stack.pop():0;toolRoute={kind:"none"}}pageIndex=0;rebuild()}
+ function changeGroup(delta){backend.latchMenu();groupIndex=(groupIndex+delta+3)%3;currentParent=0;toolRoute={kind:"none"};stack=[];pageIndex=0;contextItem={};rebuild();wheelAnimation.restart()}
  function openEntry(mode){backend.latchMenu();entryMode=mode;note.text="";note.forceActiveFocus()}
  function openAgentPrompt(){
-  var job=backend.agents.selected;agentTarget=job.target||{};previousAgent=job.id||"";agentProvider.currentIndex=job.provider==="claude"?1:0;openEntry("agent")
+  var job=backend.agents.selected;agentTarget=job.target||{};previousAgent=job.id||"";agentProvider.currentIndex=agentTarget.modelRole==="builder"?2:agentTarget.modelRole==="vision"?3:job.provider==="claude"?1:0;openEntry("agent")
  }
  function selectedTarget(){
   if(centerSelected){var name=qsTr("Master chat");for(var category of backend.categories)if(category.id===currentParent)name=category.name;return {name:name,action:"chat",id:currentParent>0?currentParent:1}}
@@ -147,6 +169,7 @@ Window {
  function confirmEntry(){
   if(!note.text.trim().length)return
   if(entryMode==="agent"){
+   if(!previousAgent.length){delete agentTarget.modelRole;if(agentProvider.currentIndex>=2)agentTarget.modelRole=agentProvider.currentIndex===2?"builder":"vision"}
    if(backend.agents.start(note.text,agentTarget,agentProvider.currentIndex===0?"codex":"claude",previousAgent).length)backend.closeMenu()
    return
   }
@@ -162,13 +185,13 @@ Window {
   if(key==="4"||key==="6"){changeGroup(key==="4"?-1:1);return}
   if(key==="page"){advancePage();return}
   if(key==="."){targetOptions();return}
-  if(key==="0"){var item=selectedTarget();if(item){agentTarget=Object.assign({},item,{id:item.id||backend.currentId,identity:identityFor(item,qsTr("Headless agent"),false)});previousAgent="";openEntry("agent")}return}
+  if(key==="0"){var item=selectedTarget();if(item&&item.action==="registered_tool"){choose(item);return}if(item){agentTarget=Object.assign({},item,{id:item.id||backend.currentId,identity:identityFor(item,qsTr("Headless agent"),false)});previousAgent="";openEntry("agent")}return}
   if(key==="/"){if(recording)backend.recorder.togglePause();else backend.recorder.start(qsTr("Mouse workflow"));return}
   if(key==="*"){entryMode="browser";return}
   if(key==="-"){finishRecording();return}
   if(key==="+"){if(backend.recorder.current.state==="paused")backend.recorder.togglePause();openEntry(recording?"note":"prompt");return}
   if(key==="enter"){if(recording)finishRecording();else openEntry("prompt");return}
-  if(key==="5"){if(centerSelected){if(currentParent===0){identityFor({name:qsTr("Master chat"),id:1},qsTr("Chat"),true);backend.openChat(1)}else {currentParent=stack.length?stack.pop():0;pageIndex=0;rebuild()}}else {centerSelected=true;selectedIndex=-1}return}
+  if(key==="5"){if(centerSelected){if(currentParent===0){identityFor({name:qsTr("Master chat"),id:1},qsTr("Chat"),true);backend.openChat(1)}else goBack()}else {centerSelected=true;selectedIndex=-1}return}
   var position=positions.indexOf(Number(key));var index=pageIndex*6+position
   if(position<0||index>=entries.length)return
   if(selectedIndex===index)choose(entries[index]);else {selectedIndex=index;centerSelected=false}
@@ -219,7 +242,7 @@ Window {
     Label {text:overlay.entryMode==="agent"?qsTr("Run for %1").arg(overlay.agentTarget.name||""):overlay.entryMode==="note"?qsTr("Explain this step"):overlay.entryMode==="deck"?qsTr("On deck"):overlay.entryMode==="browser"?qsTr("Record browser steps"):qsTr("What should we do?");font.pixelSize:20;Layout.fillWidth:true}
     Label {visible:overlay.entryMode==="note";text:{var steps=backend.recorder.current.steps||[];return steps.length?qsTr("After: %1").arg(steps[steps.length-1].label):qsTr("Before the first event")}
      textFormat:Text.PlainText;color:"#aeb9c9";wrapMode:Text.Wrap;Layout.fillWidth:true}
-    ComboBox {id:agentProvider;objectName:"headlessProvider";visible:overlay.entryMode==="agent";model:["Codex","Claude"];Layout.fillWidth:true}
+    ComboBox {id:agentProvider;objectName:"headlessProvider";visible:overlay.entryMode==="agent";enabled:!overlay.previousAgent.length;model:["Codex","Claude","Builder · Ollama cloud","Vision · Ollama cloud"];Layout.fillWidth:true}
     ScrollView {visible:overlay.entryMode==="note"||overlay.entryMode==="prompt"||overlay.entryMode==="agent";Layout.fillWidth:true;Layout.preferredHeight:110
      TextArea {id:note;objectName:"wheelNote";wrapMode:TextEdit.Wrap;placeholderText:overlay.entryMode==="note"?qsTr("Why this step? What happens next?"):qsTr("Describe a task for Codex or Claude…");selectByMouse:true
       Keys.onPressed:function(event){if(event.key===Qt.Key_Enter||event.key===Qt.Key_Return){event.accepted=true;if(!event.isAutoRepeat)overlay.confirmEntry()}else if(event.key===Qt.Key_Escape){event.accepted=true;overlay.entryMode="";keyboard.forceActiveFocus()}}
@@ -248,15 +271,17 @@ Window {
   id:contextPanel;visible:overlay.contextItem.name!==undefined&&backend.expanded;width:220;height:contextColumn.implicitHeight+16;color:"#252c37";border.color:theme.accent;radius:theme.radius;z:10
   Column {id:contextColumn;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:8;spacing:3
    Label {text:overlay.contextItem.name||"";font.bold:true;padding:8}
+   Label {visible:overlay.contextItem.action==="registered_tool";text:qsTr("Draft tool · This draft has no runnable release yet.");width:contextColumn.width;wrapMode:Text.Wrap;color:"#aeb9c9";font.pixelSize:11;padding:8}
    Button {id:favoriteOption;text:qsTr("Toggle favorite");width:contextColumn.width;visible:overlay.contextItem.action!=="add";onClicked:overlay.mark("favorites")}
    Button {text:qsTr("Toggle pin");width:contextColumn.width;visible:overlay.contextItem.action!=="add";onClicked:overlay.mark("pinned")}
    Repeater {
-    model:overlay.contextItem.id!==undefined?[qsTr("Open chat"),qsTr("Open folder"),qsTr("Edit specs and memory"),qsTr("Add child"),qsTr("Archive")]:[qsTr("Open"),qsTr("Add category here")]
+    model:overlay.contextItem.action==="registered_tool"?[qsTr("Edit"),qsTr("Name and category"),qsTr("Run unavailable")]:overlay.contextItem.id!==undefined?[qsTr("Open chat"),qsTr("Open folder"),qsTr("Edit specs and memory"),qsTr("Add child"),qsTr("Archive")]:[qsTr("Open"),qsTr("Add category here")]
     delegate:Button {
      required property string modelData
      required property int index
      width:contextColumn.width;text:modelData;flat:true
-     onClicked:{var item=overlay.contextItem;overlay.contextItem={};if(item.id!==undefined){if(index===0){overlay.identityFor(item,qsTr("Chat"),true);backend.openChat(item.id)}else if(index===1)backend.launch("folder",item.id);else if(index===2){backend.closeMenu();owner.reveal();owner.editCategory(item.id,0)}else if(index===3){backend.closeMenu();owner.reveal();owner.editCategory(-1,item.id)}else backend.archive(item.id)}else if(index===0)overlay.choose(item);else{backend.closeMenu();owner.reveal();owner.editCategory(-1,Math.max(0,overlay.currentParent))}}
+     enabled:overlay.contextItem.action!=="registered_tool"||(index<2&&overlay.contextItem.verified)
+     onClicked:{var item=overlay.contextItem;overlay.contextItem={};if(item.action==="registered_tool"){backend.closeMenu();if(index===0)backend.openToolContext(item.tool_id);else if(index===1)owner.editTool(item);return}if(item.id!==undefined){if(index===0){overlay.identityFor(item,qsTr("Chat"),true);backend.openChat(item.id)}else if(index===1)backend.launch("folder",item.id);else if(index===2){backend.closeMenu();owner.reveal();owner.editCategory(item.id,0)}else if(index===3){backend.closeMenu();owner.reveal();owner.editCategory(-1,item.id)}else backend.archive(item.id)}else if(index===0)overlay.choose(item);else{backend.closeMenu();owner.reveal();owner.editCategory(-1,Math.max(0,overlay.currentParent))}}
     }
    }
   }

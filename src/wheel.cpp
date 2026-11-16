@@ -44,6 +44,15 @@ QVariantList Backend::wheelItems(const QString &group) const {
                                             : action == "terminal" ? ">_"
                                                                    : "◇"}});
     }
+    QSqlQuery tools(m_db);
+    const QString toolFilter=group=="favorites"?"favorite=1":group=="pinned"?"pinned=1":"used>0";
+    tools.exec("SELECT tool_id,favorite,pinned FROM tool_wheel_items WHERE "+toolFilter+" ORDER BY used DESC,tool_id LIMIT 100");
+    while(tools.next()){
+        auto entry=boundTool(tools.value(0).toString());
+        if(entry.isEmpty()||entry.value("name").toString().isEmpty())continue;
+        entry["action"]="registered_tool";entry["glyph"]="⚒";entry["favorite"]=tools.value(1).toBool();entry["pinned"]=tools.value(2).toBool();
+        result.append(entry);
+    }
     return result;
 }
 bool Backend::markWheel(const QString &action, int category, const QString &group, bool enabled) {

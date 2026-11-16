@@ -11,6 +11,21 @@ use std::{
 #[derive(Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case", deny_unknown_fields)]
 enum Command {
+    ToolMenuRegister {
+        request: hotbox_core::ToolMenuRegistration,
+    },
+    ToolMenuUpdate {
+        request: hotbox_core::ToolMenuUpdate,
+    },
+    ToolMenuRead {
+        actor: String,
+        tool_id: String,
+    },
+    ToolMenuList {
+        actor: String,
+        resource: String,
+        after: String,
+    },
     NotesTick {
         actor: String,
     },
@@ -110,6 +125,9 @@ fn bounded_read(reader: impl Read) -> Result<Vec<u8>> {
 }
 fn execute() -> Result<Value> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.as_slice() == ["tool-menu-catalog"] {
+        return Ok(hotbox_core::tool_menu_catalog());
+    }
     if args.len() == 2 && args[0] == "backpack-example" {
         let backpack = hotbox_core::Backpack::example(&args[1])?;
         return Ok(
@@ -152,6 +170,20 @@ fn execute() -> Result<Value> {
     let command: Command = serde_json::from_slice(&bounded_read(io::stdin().lock())?)?;
     let mut engine = Engine::open(&args[0])?;
     Ok(match command {
+        Command::ToolMenuRegister { request } => {
+            serde_json::to_value(engine.register_tool_menu(request)?)?
+        }
+        Command::ToolMenuUpdate { request } => {
+            serde_json::to_value(engine.update_tool_menu(request)?)?
+        }
+        Command::ToolMenuRead { actor, tool_id } => {
+            serde_json::to_value(engine.read_tool_menu(&actor, &tool_id)?)?
+        }
+        Command::ToolMenuList {
+            actor,
+            resource,
+            after,
+        } => serde_json::to_value(engine.list_tool_menu(&actor, &resource, &after)?)?,
         Command::NotesTick { actor } => serde_json::to_value(engine.tick_notes(&actor)?)?,
         Command::NotesStart { request } => serde_json::to_value(engine.start_notes(request)?)?,
         Command::NotesList { actor, resource } => {

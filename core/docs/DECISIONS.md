@@ -39,6 +39,16 @@ updates; some also require a stored-data migration.
 
 ## Choices still open
 
+The product interaction requirement is settled: built tools/agents are discoverable
+through categorized Hotbox entries with declared actions and linked development
+contexts; headless services preserve work continuity while simple chats expose
+scoped history. Master controls govern permissions and context. The recent sliding
+panel is a presentation increment, not completion of that integration. See
+[the interaction and continuity contract](ARCHITECTURE.md#product-interaction-and-continuity-contract).
+User-message provenance and proposed implementation choices are separated in
+[the requirements audit](../../docs/CONTEXT_REQUIREMENTS.md); see the
+[delivery sequence](TOOL_CONTEXT_DELIVERY_PLAN.md) before adding more isolated UI.
+
 | Area | Decision needed before implementation |
 | --- | --- |
 | Production state store | SQLite service deployment versus another SQL backend; transaction and migration contract |

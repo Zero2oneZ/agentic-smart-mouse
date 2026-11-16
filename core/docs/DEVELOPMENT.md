@@ -10,6 +10,8 @@
 | [environment.rs](../src/environment.rs) | Typed backpack requirements and read-only portable environment plans |
 | [catalog.rs](../src/catalog.rs) | Typed system catalog, structural validation and hashing |
 | [lineage.rs](../src/lineage.rs) | Immutable tool versions, selected development contexts and fork metadata |
+| [toolmenu.rs](../src/toolmenu.rs) | Owner-scoped draft metadata, category placement, optimistic revisions and replay receipts |
+| [Tool menu API](TOOL_MENU_REFERENCE.md) | Generated source/compiled contract, library and real-process CLI checks |
 | [model.rs](../src/model.rs) | Templates, graph validation, input/output types and fixture evidence |
 | [permissions.rs](../src/permissions.rs) | Resources, grant lineage and revocation |
 | [engine.rs](../src/engine.rs) | Database format and transactional workflow operations |
@@ -46,7 +48,7 @@ replay, deadline and fixture boundaries.
 
 ## Current test coverage
 
-The existing suite has 46 library integration tests (24 kernel, five catalog, seven environment and ten local-task tests). This table names the tests so
+The suite has 51 library integration tests (24 kernel, five catalog, seven environment, ten local-task and five tool-menu tests). This table names the tests so
 behavior can be traced directly to executable checks.
 
 | Test | Behavior covered |
@@ -108,7 +110,7 @@ update, not a magic string in a stored template.
 
 ## Schema and policy changes
 
-Kernel schema 3 includes transactional additive migrations from schemas 1 and 2; there is no general migration framework.
+Kernel schema 4 includes transactional additive migrations from schemas 1, 2 and 3; there is no general migration framework.
 Do not change stored run/grant JSON compatibility while silently keeping the same
 schema identifier. Define migration direction, backup requirements and failure
 behavior; test both an empty installation and existing accepted checkpoints.

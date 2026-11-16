@@ -31,6 +31,13 @@ Install Rust 1.89 or newer with Cargo, rustfmt and Clippy. The compiler is insta
 through [Rust's official installation workflow](https://rust-lang.org/tools/install/).
 Python 3 and a C toolchain are needed for the CLI fixture and bundled SQLite.
 
+In the full Hotbox repository, `bin/core-cargo` selects the installed project-local
+toolchain under `.tools/rust` and defaults its cache to `.tools/cargo`. Full desktop
+builds and the check script use it automatically. To fetch into the same cache,
+run `bin/core-cargo fetch --manifest-path core/Cargo.toml --locked` from the repository
+root. The standalone crate can still use ordinary Cargo and the commands below;
+an explicit `CARGO` overrides the check script's choice.
+
 ```sh
 cd core
 cargo fetch --locked
@@ -156,6 +163,8 @@ this environment because Docker socket access is unavailable.
 See [Local tasks](docs/LOCAL_TASKS.md) for `notes_start`, `notes_list`, `notes_read`,
 `notes_tick`, `notes_advance` and `notes_control`. This deterministic notes-to-brief
 workflow stores private local tasks and writes a checked Markdown result without
-models, network or subprocess execution. Kernel schema 3 upgrades known schemas
-1/2 additively. The Qt frontend calls only these named operations through a bounded
-helper bridge; general agent/shell execution is not connected.
+models, network or subprocess execution. Kernel schema 4 upgrades known schemas
+1/2/3 additively. Qt calls these named operations through a bounded helper bridge;
+general agent/shell execution is not connected. A separate
+[tool menu bridge](docs/TOOL_MENU_REFERENCE.md) registers categorized draft tools
+and maps them to private development chats without enabling execution.

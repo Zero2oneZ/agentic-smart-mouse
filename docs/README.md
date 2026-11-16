@@ -5,6 +5,9 @@ bridge connects the local notes workflow; chat and orchestration use separate da
 
 | Documentation | Use it for |
 | --- | --- |
+| [Chat requirements and implementation audit](CONTEXT_REQUIREMENTS.md) | Original user-message references, current-chat corrections, source findings and missing tool/menu/context connections |
+| [Tool and context delivery plan](../core/docs/TOOL_CONTEXT_DELIVERY_PLAN.md) | Categorized registration, focused task continuity, headless execution and verified build-to-use acceptance |
+| [Tool menu API](../core/docs/TOOL_MENU_REFERENCE.md) | Executable core draft registration and the private Qt chat/outbox mapping |
 | [Latest build pass](BUILD_PASS_2026-11-15.md) | Roadmap gate review, completed receipt slice, blockers and verification limits |
 | [Contract audit](CONTRACT_AUDIT.md) | Current capability map, source/test references, resolved drift and remaining gates |
 | [Provider receipts](../core/docs/PROVIDER_RECEIPTS.md) | Normalized immutable observations, cache accounting, scoped reads and unknown-usage stopping |

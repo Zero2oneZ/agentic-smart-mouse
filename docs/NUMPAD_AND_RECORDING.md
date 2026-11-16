@@ -27,6 +27,21 @@ The first directional press highlights a target. Press the same direction again 
 
 The control reference is [`src/numpad.json`](../src/numpad.json). NumLock-off navigation aliases work when Qt identifies the key as a numpad key.
 
+## Registered tools
+
+**Tools → + New tool** opens the tool draft form; choosing a category first makes
+that the suggested placement. Saving creates a stable core tool identity and a
+linked private development chat, then opens that chat in the side panel. No agent
+runs during creation. The category and friendly name can change while the tool ID,
+chat history and Favorites/Pinned references remain fixed.
+
+**Tools → category → tool** opens its options. **Edit** checks the core mapping
+and returns to its existing chat; **Name and category** edits metadata. Run is
+unavailable until a verified release and runtime adapter exist. Pressing **0** on
+a registered draft opens these options rather than bypassing that restriction.
+See the [API reference](../core/docs/TOOL_MENU_REFERENCE.md) and
+[delivery plan](../core/docs/TOOL_CONTEXT_DELIVERY_PLAN.md).
+
 ## Record, explain, prepare
 
 Recording collects explicit Hotbox actions, supplied URLs, and notes. The visible recording indicator stays on the wheel and in the main window. Restart pauses unfinished recordings. Pressing + while paused resumes the recording before opening the explanation box. Notes remain in event order: the previous event appears above the note box, and subsequent events follow the saved note. Cookies, passwords, arbitrary desktop clicks and general keyboard typing are not captured.
@@ -69,6 +84,16 @@ Headless prompts save the same route with their target, and follow-up runs retai
 
 ## Chevron activity feed
 
-Master chat shows the current global event index, newest first. Other chats group activity by recorded session; headless job events group by their run ID. Session and event chevrons start collapsed. Opening an event reads its scoped detail lazily, including source, recorded identity, timestamp and payload. A small **↓ More activity** control at the bottom loads earlier events, and **↓ More detail** reads the next payload page. Expansion and loaded payloads persist across feed refreshes.
+The sliding project-chat preview now displays task-post groups over the scoped
+event index, newest first. It infers chat groups from loaded user-message order
+and groups operational events by source/session; these are display groups, not
+durable task or reply relationships. Headless job events can group by run ID.
+Operational segments and event chevrons start collapsed. Opening an event reads
+its scoped detail lazily, including source, recorded identity, timestamp and
+payload. A small **↓ More activity** control at the bottom loads earlier events,
+and **↓ More detail** reads the next payload page. Expansion and loaded payloads
+persist across feed refreshes. The [audit](CONTEXT_REQUIREMENTS.md#why-the-recent-preview-does-not-solve-continuity)
+and [delivery plan](../core/docs/TOOL_CONTEXT_DELIVERY_PLAN.md) describe the missing
+explicit task links, historical author identity and parent-task return path.
 
 Recorded phases include prompts, loaded model context, native tool pre-call arguments and results, agent prompt/context/launch/final output, local task requests, and imported/session/command records. Explicit recorded plan and command kinds are labeled Plan and Bash/command. No internal reasoning or inferred plans are fabricated. External CLI provider-internal hooks remain unconnected; their plain output is preserved as output, rather than classified as proven tool execution. Context snapshots are redacted and exclude API authorization headers. Existing access rules still apply to every detail read.

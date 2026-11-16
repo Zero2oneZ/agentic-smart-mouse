@@ -7,6 +7,7 @@ mod lineage;
 mod model;
 mod permissions;
 mod tasks;
+mod toolmenu;
 
 pub use catalog::*;
 pub use engine::{Clock, Engine, SystemClock};
@@ -15,6 +16,7 @@ pub use lineage::*;
 pub use model::*;
 pub use permissions::{Grant, GrantRequest};
 pub use tasks::*;
+pub use toolmenu::*;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

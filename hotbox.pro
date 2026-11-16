@@ -40,4 +40,6 @@ HEADERS += src/buildledger.h
 SOURCES += src/buildledger.cpp
 
 HEADERS += src/providerreceipts.h
+HEADERS += src/modelcredentials.h
 SOURCES += src/providerreceipts.cpp
+SOURCES += src/toolregistry.cpp

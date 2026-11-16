@@ -37,6 +37,14 @@ authenticate Alice, Bob or a worker. Do not expose this CLI directly to remote u
 
 ## Command catalog
 
+The [tool menu API](TOOL_MENU_REFERENCE.md) adds `tool_menu_register`,
+`tool_menu_update`, `tool_menu_read` and `tool_menu_list`, plus the database-free
+`tool-menu-catalog` invocation. These owner-scoped operations create draft metadata
+or attach an existing immutable tool version to a menu entry. They never launch a
+process or activate a release. Qt separately verifies the private chat mapping
+before opening Edit; a caller-supplied originating-chat string alone is not proof
+that such a chat exists.
+
 | Command | Required fields besides `command` | Result |
 | --- | --- | --- |
 | `resource` | `actor`, `resource` | Empty object after bootstrap or idempotent match |

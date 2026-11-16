@@ -225,7 +225,14 @@ These plug into the same boundaries later; none should become another controller
 B1: create a provider-receipt adapter for one authenticated coding run, with pinned
 model identity and explicit unknown/partial usage, then test replay/deduplication
 against temporary private state. Define its Rust acceptance mapping before adding
-another UI or automatic optimizer call.
+automatic execution UI or another optimizer call.
+
+This is the next execution ticket. The complementary
+[tool/menu/context track](TOOL_CONTEXT_DELIVERY_PLAN.md) starts with typed tool
+registration and development-context mapping, then explicit task/focus/return
+links. It may deliver authoring and unavailable-action explanations before B1–B4,
+but cannot enable general Run, acceptance or release activation ahead of those
+gates. Its core changes still require fresh core build/schema verification.
 
 
 ## Build ticket checklist

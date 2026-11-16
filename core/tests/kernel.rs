@@ -774,5 +774,5 @@ fn schema_one_migration_preserves_inflight_work_and_grants() {
     let version: i64 = db
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 3);
+    assert_eq!(version, 4);
 }

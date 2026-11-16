@@ -14,7 +14,7 @@ pub struct ToolVersion {
     pub originating_chat: String,
 }
 impl ToolVersion {
-    fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         for id in [
             &self.version,
             &self.architecture_version,
@@ -73,7 +73,7 @@ fn resource(db: &Connection, tool: &str) -> Result<String> {
     .optional()?
     .ok_or_else(|| Error::NotFound("tool".into()))
 }
-fn owns(db: &Connection, actor: &str, resource: &str) -> Result<()> {
+pub(crate) fn owns(db: &Connection, actor: &str, resource: &str) -> Result<()> {
     let owner: String = db
         .query_row("SELECT owner FROM resources WHERE id=?1", [resource], |r| {
             r.get(0)
@@ -87,7 +87,7 @@ fn owns(db: &Connection, actor: &str, resource: &str) -> Result<()> {
     }
     Ok(())
 }
-fn version(db: &Connection, tool: &str, selected: &str) -> Result<ToolVersion> {
+pub(crate) fn version(db: &Connection, tool: &str, selected: &str) -> Result<ToolVersion> {
     let doc: String = db
         .query_row(
             "SELECT document FROM tool_versions WHERE tool_id=?1 AND version=?2",

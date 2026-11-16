@@ -113,10 +113,10 @@ ColumnLayout {
  }
  Dialog {id:runDialog;title:qsTr("Prompt selected build step");modal:true;anchors.centerIn:parent;width:450
   contentItem:ColumnLayout {
-   ComboBox {id:provider;model:["Codex","Claude"];Layout.fillWidth:true}
+   ComboBox {id:provider;model:["Codex","Claude","Builder · Ollama cloud","Vision · Ollama cloud"];Layout.fillWidth:true}
    TextArea {id:runPrompt;placeholderText:qsTr("What should this step do?");Layout.fillWidth:true;Layout.preferredHeight:110;wrapMode:TextEdit.Wrap}
    Label {text:qsTr("Runs in a private starter directory and links the output to this step. Existing project source is not automatically edited.");Layout.fillWidth:true;wrapMode:Text.Wrap}
-   Button {text:qsTr("Run");onClicked:{var id=backend.agents.start(runPrompt.text,{name:root.road.title,id:root.road.workspace,action:"build",build:root.road.id,step:root.step},provider.currentIndex===0?"codex":"claude");if(id.length){runDialog.close();root.refresh()}else root.problem=backend.agents.problem}}
+   Button {text:qsTr("Run");onClicked:{var target={name:root.road.title,id:root.road.workspace,action:"build",build:root.road.id,step:root.step};if(provider.currentIndex>=2)target.modelRole=provider.currentIndex===2?"builder":"vision";var id=backend.agents.start(runPrompt.text,target,provider.currentIndex===0?"codex":"claude");if(id.length){runDialog.close();root.refresh()}else root.problem=backend.agents.problem}}
    Button {text:qsTr("Cancel");onClicked:runDialog.close()}
   }
  }

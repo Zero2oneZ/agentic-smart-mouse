@@ -24,6 +24,9 @@
 #include <QStandardPaths>
 #include <QTextStream>
 #include <QTimer>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <Window>
 
 static QJsonDocument hypr(const QString &command) {
@@ -390,6 +393,45 @@ int main(int argc, char **argv) {
     engine.load(QUrl("qrc:/Main.qml"));
     if (engine.rootObjects().isEmpty())
         return 1;
+    if (!smoke) {
+        // Probe asynchronously so startup never waits for the model service.
+        auto *network = new QNetworkAccessManager(&app);
+        const QString host = qEnvironmentVariable("OLLAMA_HOST", "http://127.0.0.1:11434");
+        QUrl endpoint(host.contains("://") ? host : "http://" + host);
+        endpoint.setPath("/api/version");
+        QNetworkRequest request(endpoint);
+        request.setTransferTimeout(1500);
+        auto *reply = network->get(request);
+        QObject::connect(reply, &QNetworkReply::finished, &app, [reply, endpoint] {
+            const bool available = reply->error() == QNetworkReply::NoError;
+            reply->deleteLater();
+            if (available) return;
+            // Remote endpoints are managed by their owner.
+            if (!QStringList{"127.0.0.1", "localhost", "::1"}.contains(endpoint.host())) return;
+            QString binary;
+            for (const auto &candidate : QStringList{
+                     QCoreApplication::applicationDirPath() + "/../.tools/ollama/bin/ollama",
+                     QCoreApplication::applicationDirPath() + "/../lib/hotbox/ollama",
+                     QStandardPaths::findExecutable("ollama")}) {
+                if (QFileInfo(candidate).isExecutable() && QFileInfo(candidate).isFile()) {
+                    binary = candidate;
+                    break;
+                }
+            }
+            if (binary.isEmpty()) {
+                qWarning("Ollama startup: executable not found");
+                return;
+            }
+            const auto logs = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+            QDir().mkpath(logs);
+            QProcess service;
+            service.setProgram(binary);
+            service.setArguments({"serve"});
+            service.setStandardOutputFile(logs + "/ollama.log", QIODevice::Append);
+            service.setStandardErrorFile(logs + "/ollama.log", QIODevice::Append);
+            if (!service.startDetached()) qWarning("Ollama startup failed; see ollama.log");
+        });
+    }
     auto mainWindow = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
     auto menu = mainWindow->findChild<QQuickWindow *>("hotboxOverlay");
     if (!menu)
@@ -474,10 +516,35 @@ int main(int argc, char **argv) {
         while (server.hasPendingConnections()) {
             auto *socket = server.nextPendingConnection();
             socket->setParent(&server);
+            socket->setReadBufferSize(16385);
             QObject::connect(socket, &QLocalSocket::readyRead, socket, [&, socket] {
+                if (socket->bytesAvailable() > 16384) {
+                    socket->disconnectFromServer();
+                    return;
+                }
                 if (socket->canReadLine()) {
                     QString cmd = QString::fromUtf8(socket->readLine()).trimmed();
-                    handle(cmd);
+                    if (cmd.startsWith('{')) {
+                        auto request = QJsonDocument::fromJson(cmd.toUtf8()).object();
+                        QJsonObject response{{"ok", false}, {"error", "Invalid cloud role request"}};
+                        if (request["operation"].toString() == "cloud-role.start") {
+                            const auto role = request["role"].toString();
+                            const int category = request["category"].toInt();
+                            QString name;
+                            for (const auto &value : backend.categories()) {
+                                const auto item = value.toMap();
+                                if (item["id"].toInt() == category) name = item["name"].toString();
+                            }
+                            if (!name.isEmpty() && QStringList{"builder", "vision"}.contains(role)) {
+                                const auto id = backend.agents()->start(request["prompt"].toString(),
+                                    {{"name", name}, {"id", category}, {"modelRole", role}}, "claude");
+                                response = QJsonObject{{"ok", !id.isEmpty()}, {"run", id}};
+                                if (id.isEmpty()) response["error"] = backend.agents()->problem();
+                            }
+                        }
+                        socket->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + '\n');
+                        socket->flush();
+                    } else handle(cmd);
                     socket->disconnectFromServer();
                 }
             });

@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""Install the official Ollama cloud CLI under .tools/ollama without sudo."""
+import hashlib
+import argparse
+import json
+import os
+from pathlib import Path
+import platform
+import subprocess
+import shutil
+import tempfile
+from project_runtime import ROOT
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--full', action='store_true', help='Include local inference runners and libraries')
+args = parser.parse_args()
+
+architecture = {'x86_64': 'amd64', 'aarch64': 'arm64'}.get(platform.machine())
+if not architecture:
+    raise SystemExit('Unsupported architecture: ' + platform.machine())
+destination = ROOT / '.tools/ollama'
+binary = destination / 'bin/ollama'
+if binary.is_file() and (not args.full or (destination / 'lib/ollama/llama-server').is_file()):
+    print('Project Ollama is already installed:', binary)
+    raise SystemExit(0)
+destination.mkdir(parents=True, exist_ok=True)
+url = f'https://ollama.com/download/ollama-linux-{architecture}.tar.zst'
+with tempfile.TemporaryDirectory(prefix='install-', dir=destination) as temp:
+    archive = Path(temp) / 'ollama.tar.zst'
+    result = subprocess.run(['curl', '--fail', '--location', '--connect-timeout', '10', '--max-time', '600', '--output', str(archive), url])
+    if result.returncode:
+        raise SystemExit('Download failed; existing installation preserved. Re-run bin/install-ollama' + (' --full' if args.full else '') + ' from a terminal with network access.')
+    members = ['bin/ollama', 'lib/ollama'] if args.full else ['bin/ollama']
+    subprocess.run(['tar', '--zstd', '--extract', '--file', str(archive), '--directory', temp, '--no-same-owner', *members], check=True)
+    candidate = Path(temp) / 'bin/ollama'
+    if candidate.is_symlink() or not candidate.is_file():
+        raise SystemExit('The archive did not contain a regular Ollama executable.')
+    candidate.chmod(0o755)
+    if args.full:
+        libraries = Path(temp) / 'lib/ollama'
+        if not (libraries / 'llama-server').is_file():
+            raise SystemExit('The archive is missing the local inference runner; existing installation preserved.')
+        target = destination / 'lib/ollama'
+        target.parent.mkdir(exist_ok=True)
+        backup = destination / 'lib/ollama.previous'
+        if backup.exists():
+            shutil.rmtree(backup)
+        if target.exists():
+            os.replace(target, backup)
+        try:
+            os.replace(libraries, target)
+        except OSError:
+            if backup.exists():
+                os.replace(backup, target)
+            raise
+        if backup.exists():
+            shutil.rmtree(backup)
+    digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+    binary.parent.mkdir(exist_ok=True)
+    os.replace(candidate, binary)
+    (destination / 'installation.json').write_text(json.dumps({'source': url, 'binary_sha256': digest, 'scope': 'full' if args.full else 'cloud-cli-only'}, indent=2) + '\n')
+print('Installed project Ollama:', binary)
+print('Use bin/project-shell to make it available in a project terminal.')

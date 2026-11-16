@@ -4,7 +4,9 @@
 
 The kernel is a local library and short-lived CLI. There is no service to start,
 network port to open, container runtime to configure or Redis/GraphQL endpoint.
-It does not consume the desktop app's model settings or respond to Hotbox clicks.
+It does not consume desktop model credentials. Bounded Qt bridges invoke the
+fixed notes operations and owner-scoped tool-menu metadata operations; general
+worker dispatch and runtime activation remain unconnected.
 
 Prerequisites are Rust 1.89+, Cargo, rustfmt, Clippy, Python 3 and a C toolchain.
 SQLite is compiled through the locked bundled dependency. Fetch dependencies once;
@@ -23,19 +25,11 @@ format checking, Clippy with warnings as errors, tests, a debug build and the
 temporary CLI fixture. It uses Cargo metadata to find the actual output directory,
 including when `CARGO_TARGET_DIR` is set. `CARGO` can specify a Cargo executable.
 
-The development session initially installed a temporary toolchain without changing
-the system PATH. While it still exists, verify from the repository root with:
-
-```sh
-RUSTUP_HOME=/tmp/hotbox-rustup \
-CARGO_HOME=/tmp/hotbox-cargo \
-CARGO=/tmp/hotbox-cargo/bin/cargo \
-core/scripts/check
-```
-
-Those `/tmp` paths are disposable, not an installation dependency. A new machine
-should use its own toolchain and dependency cache. No temporary path is embedded
-in the source contracts or database format.
+The full repository now uses `bin/core-cargo` for `.tools/rust` and the private
+`.tools/cargo` dependency cache. Run `core/scripts/check` from the repository root;
+use `bin/core-cargo fetch --manifest-path core/Cargo.toml --locked` once when the
+cache needs preparation. Standalone copies can use ordinary Cargo. Explicit
+`CARGO`, `CARGO_HOME`, `RUSTC` and `RUSTDOC` choices remain supported.
 
 ## Database placement and lifecycle
 
@@ -52,17 +46,19 @@ The kernel:
   busy timeout.
 - Commits mutations and corresponding accepted-operation events together using
   immediate transactions.
-- Uses application ID `1212307523` (`0x48425843`) and schema version `3`.
+- Uses application ID `1212307523` (`0x48425843`) and schema version `4`.
 - Rejects unrelated databases and unsupported schema versions instead of adopting
-  them. Only known kernel schemas 1/2 are upgraded.
+  them. Only known kernel schemas 1/2/3 are upgraded.
 
-Schema version 3 stores:
+Schema version 4 stores:
 
 | Table | Columns | Meaning |
 | --- | --- | --- |
 | `local_tasks` | `id`, `document` | Immutable notes request, checkpoint, controls and private result references |
 | `tools` | `id`, `resource`, `origin` | Tool identity and optional selected fork ancestor |
 | `tool_versions` | `tool_id`, `version`, `document` | Immutable pinned version metadata |
+| `tool_menu` | `tool_id`, `document` | Owner-scoped display/category metadata and fixed development-context reference |
+| `tool_menu_requests` | `id`, `actor`, `request`, `response` | Immutable idempotency receipts for registration/metadata updates |
 | `resources` | `id`, `owner` | Local resource identity and ownership |
 | `grants` | `id`, `document` | JSON grant and revocation state |
 | `runs` | `id`, `document` | Full pinned run, template, inputs, counters and checkpoints |
@@ -169,12 +165,12 @@ distributable clone. Source history does not grant access to runtime data.
 Do not troubleshoot by injecting desktop input, disabling authorization checks or
 editing checkpoint JSON. The [CLI reference](CLI.md) documents the supported controls.
 
-## Kernel schemas 1/2 → 3
+## Kernel schemas 1 through 3 upgrade to 4
 
-Opening a known schema-1 or schema-2 database adds the required tool/version tables
-and the fixed local-task table/index, then sets user_version to 3 in one immediate
-transaction. Existing resources, grants, events and active workflow checkpoints are
-preserved. The Qt chat database is separate and never migrated by the core.
-Older core binaries reject schema 3. Use a consistent database backup and matching
-binary for downgrade; do not manually lower user_version. See [Local tasks](LOCAL_TASKS.md)
-for private result storage and interrupted-publication recovery.
+Opening a known kernel schema adds the existing tool/version and local-task tables
+when needed, then the tool-menu metadata and request-receipt tables. One immediate
+transaction sets user_version to 4. Resources, grants, events, tool versions and
+active workflow checkpoints are preserved. The Qt chat database remains separate.
+Older core binaries reject schema 4. Restore a consistent database backup and
+matching binary to downgrade; never lower user_version by hand. See
+[the tool menu API](TOOL_MENU_REFERENCE.md) and [local tasks](LOCAL_TASKS.md).

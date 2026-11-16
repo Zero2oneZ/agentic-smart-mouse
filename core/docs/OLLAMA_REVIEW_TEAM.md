@@ -63,11 +63,14 @@ Do not assume cloud structured-output support; the current cloud overview states
 that it is unsupported. Findings must be parsed/reviewed as untrusted text rather
 than claiming provider-enforced schemas.
 
-This workspace currently has no Ollama CLI, saved Hotbox model endpoint or exposed
-`OLLAMA_API_KEY`. The coding shell also has network restrictions. Required next
-inputs are the direct-cloud/proxy route, model identifiers and the key environment
-variable name. Actual secrets stay outside source and SQL. No API key should be
-pasted into chat or committed.
+Project Builder and Vision cloud roles now have a shared catalog, direct-cloud
+Claude routing, supervised Hotbox integration and terminal entry points; see
+[project role setup](../../README.md#ollama-cloud-role-models). Credentials are
+loaded from the private runtime file or process environment. The native Ollama
+CLI download and live authentication remain unverified because this coding shell
+has DNS/network restrictions. These roles do not assign models to this separate
+three-reviewer batch or enable it. Actual secrets stay outside source and SQL.
+No API key should be pasted into chat or committed.
 
 Once connected, run one small source-review packet first, verify response/usage
 capture and scope, then run the other independent packets. Preserve each model,

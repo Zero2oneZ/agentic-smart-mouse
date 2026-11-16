@@ -40,6 +40,25 @@ files=[(root/'build/hotbox-core',destination/'hotbox-core'),
        (root/'pkgbuild/hotbox.desktop',Path(os.environ.get('XDG_DATA_HOME',home/'.local/share'))/'applications/hotbox.desktop'),
        (root/'pkgbuild/hotbox.svg',Path(os.environ.get('XDG_DATA_HOME',home/'.local/share'))/'icons/hicolor/scalable/apps/hotbox.svg')]
 staged=[]
+ollama = root/'.tools/ollama/bin/ollama'
+if ollama.is_file():
+    files.append((ollama, home/'.local/lib/hotbox/ollama'))
+libraries = root/'.tools/ollama/lib/ollama'
+if libraries.is_dir():
+    library_target = home/'.local/lib/hotbox/lib/ollama'
+    library_target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=library_target.parent, prefix='ollama-install-') as temporary:
+        replacement = Path(temporary)/'new'
+        previous = Path(temporary)/'previous'
+        shutil.copytree(libraries, replacement, symlinks=True)
+        if library_target.exists():
+            os.replace(library_target, previous)
+        try:
+            os.replace(replacement, library_target)
+        except OSError:
+            if previous.exists():
+                os.replace(previous, library_target)
+            raise
 try:
     for source,target in files:
         target.parent.mkdir(parents=True,exist_ok=True)
@@ -47,7 +66,7 @@ try:
             temporary=Path(file.name)
         staged.append((temporary,target))
         shutil.copy2(source,temporary)
-        temporary.chmod(0o755 if target.parent==destination else 0o644)
+        temporary.chmod(0o755 if target.parent==destination or target.name=='ollama' else 0o644)
     for temporary,target in staged:
         os.replace(temporary,target)
 finally:

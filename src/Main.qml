@@ -15,6 +15,8 @@ ApplicationWindow {
  property int newParent: 0
  property bool helpVisible: false
  property bool moreOptions: false
+ property string previousPage:"tasks"
+ onPageChanged: if(page==="chat"){page=previousPage;chatPanel.open()}else previousPage=page
  onClosing: function(close) { close.accepted = allowClose; if (!allowClose) hide() }
  Shortcut { sequence: "?"; context: Qt.ApplicationShortcut; enabled: !composer.activeFocus&&!backend.expanded&&win.page!=="tasks"&&win.page!=="recordings"; onActivated: help.open() }
  Shortcut { sequence: "Ctrl+K"; context: Qt.ApplicationShortcut; onActivated: {win.page="bindings";backend.refreshBindings();bindingSearch.forceActiveFocus()} }
@@ -30,11 +32,13 @@ ApplicationWindow {
  }
  function openTaskComposer(){tasksView.newTask()}
  function openRecordingNote(){recordingsView.addNote()}
+ function openTools(group,create){win.page="tools";toolsView.groupFilter=group||"";win.reveal();if(create)toolsView.newTool(group||"")}
+ function editTool(row){win.page="tools";win.reveal();toolsView.editTool(row)}
  function reveal() {show();raise();requestActivate()}
  Connections {
   target:backend
   function onShowAgent(view){if(view==="prompt"){backend.preview();overlay.openAgentPrompt()}else{win.page="agents";win.reveal()}}
-  function onShowChat(){win.page="chat";win.reveal();composer.forceActiveFocus()}
+  function onShowChat(){win.reveal();chatPanel.open();composer.forceActiveFocus()}
   function onShowKeypad(){backend.preview()}
   function onShowTasks(view){win.page="tasks";win.reveal();if(view==="task")tasksView.newTask();if(backend.tasks)backend.tasks.refresh()}
   function onShowBindings(){win.page="bindings";win.reveal();bindingSearch.forceActiveFocus()}
@@ -55,9 +59,10 @@ ApplicationWindow {
       Label {text:"●";color:theme.accent;font.pixelSize:18}
      }
      Button {text:qsTr("Mouse Hotbox");Layout.fillWidth:true;onClicked:backend.launch("keypad")}
-     Button {text:qsTr("Build roadmap");Layout.fillWidth:true;onClicked:win.page="builds"}
-     Button {text:qsTr("Agents");Layout.fillWidth:true;onClicked:win.page="agents"}
-     Button {text:qsTr("Teach a helper");Layout.fillWidth:true;flat:true;onClicked:win.page="recordings"}
+     Button {text:qsTr("Tools");Layout.fillWidth:true;onClicked:{win.page="tools";backend.refreshToolRegistry()}}
+     Button {visible:win.moreOptions;text:qsTr("Build roadmap");Layout.fillWidth:true;onClicked:win.page="builds"}
+     Button {visible:win.moreOptions;text:qsTr("Agents");Layout.fillWidth:true;onClicked:win.page="agents"}
+     Button {visible:win.moreOptions;text:qsTr("Teach a helper");Layout.fillWidth:true;flat:true;onClicked:win.page="recordings"}
      Button {text:qsTr("New task");Layout.fillWidth:true;onClicked:{win.page="tasks";tasksView.newTask()}}
      Button {text:qsTr("Activity");Layout.fillWidth:true;flat:true;onClicked:{win.page="tasks";if(backend.tasks)backend.tasks.refresh()}}
      Label {text:qsTr("YOUR PROJECTS");color:"#858b99";font.pixelSize:10;font.letterSpacing:1.5}
@@ -97,53 +102,14 @@ ApplicationWindow {
       anchors.fill:parent;anchors.margins:22
       ColumnLayout {Layout.fillWidth:true;spacing:5
        Label {visible:win.page==="chat";text:qsTr("%1  ·  %2").arg(backend.feedIdentity.mark).arg(backend.feedIdentity.route);textFormat:Text.PlainText;color:backend.feedIdentity.color;font.pixelSize:11;Layout.fillWidth:true;elide:Text.ElideMiddle}
-       Label {text:win.page==="builds"?qsTr("Build roadmap"):win.page==="agents"?qsTr("Agents"):win.page==="recordings"?qsTr("Teach a helper"):win.page==="tasks"?qsTr("Activity"):win.page==="architecture"?qsTr("Files and storage"):win.page==="segments"?qsTr("Saved work"):win.page==="timeline"?qsTr("History"):(win.page==="bindings"?qsTr("Omarchy keybindings"):backend.title);font.pixelSize:22;font.weight:Font.DemiBold}
-       Label {text:win.page==="tasks"?qsTr("Your tasks, progress, and results"):win.page==="bindings"?qsTr("Search shortcuts from your current desktop configuration"):(backend.folder||qsTr("Persistent conversation · local memory"));color:"#9198a6";font.pixelSize:12;elide:Text.ElideMiddle;Layout.fillWidth:true}
+       Label {text:win.page==="tools"?qsTr("Tools"):win.page==="builds"?qsTr("Build roadmap"):win.page==="agents"?qsTr("Agents"):win.page==="recordings"?qsTr("Teach a helper"):win.page==="tasks"?qsTr("Activity"):win.page==="architecture"?qsTr("Files and storage"):win.page==="segments"?qsTr("Saved work"):win.page==="timeline"?qsTr("History"):(win.page==="bindings"?qsTr("Omarchy keybindings"):backend.title);font.pixelSize:22;font.weight:Font.DemiBold}
+       Label {text:win.page==="tools"?qsTr("Create tools and return to their development context"):win.page==="tasks"?qsTr("Your tasks, progress, and results"):win.page==="bindings"?qsTr("Search shortcuts from your current desktop configuration"):(backend.folder||qsTr("Persistent conversation · local memory"));color:"#9198a6";font.pixelSize:12;elide:Text.ElideMiddle;Layout.fillWidth:true}
       }
       Button {visible:win.page==="chat";text:qsTr("Project brief");onClicked:win.editCategory(backend.currentId,0)}
       Button {visible:win.page==="chat";text:qsTr("Folder");onClicked:backend.launch("folder")}
       Button {visible:win.page!=="tasks";text:win.page==="timeline"?qsTr("Chat"):qsTr("Timeline");onClicked:win.page=win.page==="timeline"?"chat":"timeline"}
+      Button {text:qsTr("Project chat");onClicked:chatPanel.open()}
       Button {text:"?";onClicked:help.open()}
-     }
-    }
-    ColumnLayout {
-     visible:win.page==="chat";Layout.fillHeight:true;Layout.fillWidth:true;spacing:0
-     Rectangle {
-      property bool opened:false
-      property int scope:backend.currentId
-      onScopeChanged:opened=false
-      visible:backend.brief.length>0;Layout.fillWidth:true;Layout.preferredHeight:opened?Math.min(160,briefLabel.implicitHeight+60):42;color:"#1a2027"
-      Button {id:briefToggle;anchors.left:parent.left;anchors.right:parent.right;height:40;flat:true;text:(parent.opened?"⌄  ":">  ")+qsTr("Project memory");onClicked:parent.opened=!parent.opened}
-      Label {id:briefLabel;visible:parent.opened;anchors.left:parent.left;anchors.right:parent.right;anchors.top:briefToggle.bottom;anchors.margins:12;text:backend.brief;textFormat:Text.PlainText;wrapMode:Text.Wrap;color:"#aeb9c9";font.pixelSize:12;maximumLineCount:4;elide:Text.ElideRight}
-     }
-
-     Item {
-      Layout.fillWidth:true;Layout.fillHeight:true
-      Column {
-       visible:false;anchors.centerIn:parent;width:Math.min(parent.width-60,520);spacing:16
-       Label {text:"◎";font.pixelSize:50;color:theme.accent;anchors.horizontalCenter:parent.horizontalCenter}
-       Label {text:qsTr("A place to pick up where you left off.");font.pixelSize:24;wrapMode:Text.Wrap;width:parent.width;horizontalAlignment:Text.AlignHCenter}
-       Label {text:qsTr("Keep a conversation, project location, and living brief together. Add a category from the sidebar or the hotbox.");color:"#9198a6";font.pixelSize:14;wrapMode:Text.Wrap;width:parent.width;horizontalAlignment:Text.AlignHCenter}
-      }
-      ActivityFeed {id:feed;anchors.fill:parent;anchors.margins:22}
-     }
-
-     Button {visible:!feed.followTail;text:qsTr("Jump to latest");Layout.alignment:Qt.AlignRight;onClicked:{feed.followTail=true;feed.goLatest()}}
-     Rectangle {
-      Layout.fillWidth:true;Layout.preferredHeight:Math.min(190,Math.max(115,composer.contentHeight+65));Layout.margins:22;Layout.topMargin:0;color:"#20252e";border.color:composer.activeFocus?theme.accent:"#353c49";radius:theme.radius
-      ColumnLayout {
-       anchors.fill:parent;anchors.margins:12;spacing:5
-       ScrollView {
-        Layout.fillWidth:true;Layout.fillHeight:true
-        TextArea {id:composer;placeholderText:qsTr("Message %1…").arg(backend.feedIdentity.label);wrapMode:TextArea.Wrap;background:null;selectByMouse:true
-         Keys.onReturnPressed:function(event){if(!(event.modifiers&Qt.ShiftModifier)){if(!backend.busy&&text.trim().length){backend.send(text);text=""}event.accepted=true}else event.accepted=false}
-        }
-       }
-       RowLayout {Layout.fillWidth:true
-        Label {text:qsTr("Enter to send · Shift+Enter for a new line");color:"#9198a6";font.pixelSize:10;Layout.fillWidth:true}
-        Button {text:backend.busy?qsTr("Stop"):qsTr("Send ↑");enabled:backend.busy||composer.text.trim().length>0;onClicked:{if(backend.busy)backend.cancel();else{backend.send(composer.text);composer.text=""}}}
-       }
-      }
      }
     }
     ColumnLayout {
@@ -172,6 +138,7 @@ ApplicationWindow {
      Button {text:qsTr("Finish");onClicked:{backend.recorder.stop();win.page="recordings"}}
     }
     Builds {visible:win.page==="builds";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
+    Tools {id:toolsView;visible:win.page==="tools";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
     Agents {id:agentView;visible:win.page==="agents";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
     Recordings {id:recordingsView;visible:win.page==="recordings";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:18}
     Tasks {id:tasksView;visible:win.page==="tasks";Layout.fillWidth:true;Layout.fillHeight:true;Layout.margins:22}
@@ -184,6 +151,78 @@ ApplicationWindow {
      ToolButton {id:closeStatus;anchors.right:parent.right;anchors.verticalCenter:parent.verticalCenter;text:"×";onClicked:backend.clearStatus()}
     }
    }
+  }
+ }
+ Drawer {
+  id:chatPanel;objectName:"projectChatPanel"
+  edge:Qt.RightEdge;width:Math.min(win.width-24,640);height:win.height
+  modal:false;dim:false;closePolicy:Popup.CloseOnEscape
+  background:Rectangle {color:"#11151c";border.color:backend.feedIdentity.color;border.width:2}
+  contentItem:ColumnLayout {
+   spacing:0
+   Rectangle {
+    Layout.fillWidth:true;Layout.preferredHeight:116;color:"#1b222d"
+    Rectangle {anchors.left:parent.left;anchors.top:parent.top;anchors.bottom:parent.bottom;width:6;color:backend.feedIdentity.color}
+    ColumnLayout {
+     anchors.fill:parent;anchors.margins:18;anchors.leftMargin:24;spacing:4
+     RowLayout {
+      Layout.fillWidth:true
+      Label {text:qsTr("PROJECT CONTEXT");color:backend.feedIdentity.color;font.pixelSize:10;font.letterSpacing:1.4;Layout.fillWidth:true}
+      ToolButton {text:"×";Accessible.name:qsTr("Close project chat");onClicked:chatPanel.close()}
+     }
+     Label {objectName:"projectChatHeading";text:backend.title;textFormat:Text.PlainText;font.pixelSize:28;font.bold:true;Layout.fillWidth:true;elide:Text.ElideRight;Accessible.role:Accessible.Heading}
+     Label {text:qsTr("Tasks, replies, and shared project history");color:"#aeb9c9";font.pixelSize:12}
+    }
+   }
+   RowLayout {
+    Layout.fillWidth:true;Layout.leftMargin:18;Layout.rightMargin:18
+    Button {text:qsTr("Context brief");flat:true;onClicked:win.editCategory(backend.currentId,0)}
+    Button {text:qsTr("History");flat:true;onClicked:{chatPanel.close();win.page="timeline"}}
+    Item {Layout.fillWidth:true}
+    Label {text:backend.busy?qsTr("Responding…"):qsTr("Project scope");color:backend.feedIdentity.color;font.pixelSize:11}
+   }
+    ColumnLayout {
+     Layout.fillHeight:true;Layout.fillWidth:true;spacing:0
+     Rectangle {
+      property bool opened:false
+      property int scope:backend.currentId
+      onScopeChanged:opened=false
+      visible:backend.brief.length>0;Layout.fillWidth:true;Layout.preferredHeight:opened?Math.min(160,briefLabel.implicitHeight+60):42;color:"#1a2027"
+      Button {id:briefToggle;anchors.left:parent.left;anchors.right:parent.right;height:40;flat:true;text:(parent.opened?"⌄  ":">  ")+qsTr("Project memory");onClicked:parent.opened=!parent.opened}
+      Label {id:briefLabel;visible:parent.opened;anchors.left:parent.left;anchors.right:parent.right;anchors.top:briefToggle.bottom;anchors.margins:12;text:backend.brief;textFormat:Text.PlainText;wrapMode:Text.Wrap;color:"#aeb9c9";font.pixelSize:12;maximumLineCount:4;elide:Text.ElideRight}
+     }
+
+     Item {
+      Layout.fillWidth:true;Layout.fillHeight:true
+      Column {
+       visible:false;anchors.centerIn:parent;width:Math.min(parent.width-60,520);spacing:16
+       Label {text:"◎";font.pixelSize:50;color:theme.accent;anchors.horizontalCenter:parent.horizontalCenter}
+       Label {text:qsTr("A place to pick up where you left off.");font.pixelSize:24;wrapMode:Text.Wrap;width:parent.width;horizontalAlignment:Text.AlignHCenter}
+       Label {text:qsTr("Keep a conversation, project location, and living brief together. Add a category from the sidebar or the hotbox.");color:"#9198a6";font.pixelSize:14;wrapMode:Text.Wrap;width:parent.width;horizontalAlignment:Text.AlignHCenter}
+      }
+      ActivityFeed {id:feed;anchors.fill:parent;anchors.margins:22}
+     }
+
+     Button {visible:!feed.followTail;text:qsTr("Jump to latest");Layout.alignment:Qt.AlignRight;onClicked:{feed.followTail=true;feed.goLatest()}}
+     Rectangle {
+      Layout.fillWidth:true;Layout.preferredHeight:Math.min(190,Math.max(115,composer.contentHeight+65));Layout.margins:22;Layout.topMargin:0;color:"#20252e";border.color:composer.activeFocus?theme.accent:"#353c49";radius:theme.radius
+      ColumnLayout {
+       anchors.fill:parent;anchors.margins:12;spacing:5
+       ScrollView {
+        Layout.fillWidth:true;Layout.fillHeight:true
+        TextArea {id:composer;property var drafts:({});property int draftScope:backend.currentId;property int scope:backend.currentId
+         onScopeChanged:{drafts[draftScope]=text;text=drafts[scope]||"";draftScope=scope}
+         placeholderText:qsTr("Describe a task for %1…").arg(backend.title);wrapMode:TextArea.Wrap;background:null;selectByMouse:true
+         Keys.onReturnPressed:function(event){if(!(event.modifiers&Qt.ShiftModifier)){if(!backend.busy&&text.trim().length){backend.send(text);text=""}event.accepted=true}else event.accepted=false}
+        }
+       }
+       RowLayout {Layout.fillWidth:true
+        Label {text:qsTr("Enter to send · Shift+Enter for a new line");color:"#9198a6";font.pixelSize:10;Layout.fillWidth:true}
+        Button {text:backend.busy?qsTr("Stop"):qsTr("Post ↑");enabled:backend.busy||composer.text.trim().length>0;onClicked:{if(backend.busy)backend.cancel();else{backend.send(composer.text);composer.text=""}}}
+       }
+      }
+     }
+    }
   }
  }
  Menu {

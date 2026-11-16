@@ -22,6 +22,7 @@ __pycache__/
 /agent-runs/
 /task-results/
 /worktrees/
+/.tools/
 
 # Private session exports and configuration backups.
 *.jsonl

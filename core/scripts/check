@@ -1,11 +1,17 @@
 #!/bin/sh
 set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-CARGO="${CARGO:-cargo}"
+if [ -x "$ROOT/../bin/core-cargo" ]; then
+    CARGO="${CARGO:-$ROOT/../bin/core-cargo}"
+else
+    CARGO="${CARGO:-cargo}"
+fi
 "$CARGO" fmt --manifest-path "$ROOT/Cargo.toml" --check
 "$CARGO" clippy --manifest-path "$ROOT/Cargo.toml" --locked --offline --all-targets -- -D warnings
 "$CARGO" test --manifest-path "$ROOT/Cargo.toml" --locked --offline
 "$CARGO" build --manifest-path "$ROOT/Cargo.toml" --locked --offline
 TARGET_DIR="$("$CARGO" metadata --manifest-path "$ROOT/Cargo.toml" --locked --offline --format-version 1 --no-deps | python3 -c 'import json,sys;print(json.load(sys.stdin)["target_directory"])')"
 python3 "$ROOT/tests/test_packaging.py"
+python3 "$ROOT/scripts/check_tool_menu.py" --binary "$TARGET_DIR/debug/hotbox-core"
+python3 "$ROOT/tests/test_tool_menu_cli.py" "$TARGET_DIR/debug/hotbox-core"
 exec python3 "$ROOT/scripts/fixture_workflow.py" "$TARGET_DIR/debug/hotbox-core" "$ROOT/templates/segmented-build-v1.json"
